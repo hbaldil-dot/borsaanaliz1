@@ -21,7 +21,7 @@ async def chat(request: ChatRequest):
         return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!", "retry_after": 0}
 
     # Gemini REST API Endpoint
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": request.message}]}]}
 
     async with httpx.AsyncClient() as client:

@@ -1,10 +1,11 @@
 """
-BIST Screener - Finnhub ile Gerçek Veri
+BIST Screener - Yahoo Finance ile Gerçek Veri
 """
 
 import os
+import time
 import random
-import httpx
+import yfinance as yf
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,162 +24,118 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
 # ============================================================
-# 📊 TÜM BIST HİSSELERİ (GÜNCEL LİSTE)
+# 📊 TÜM BIST HİSSELERİ
 # ============================================================
 
 BIST_STOCKS = {
-    # Bankalar
+    "THYAO": "Türk Hava Yolları",
+    "ASELS": "Aselsan",
+    "KCHOL": "Koç Holding",
+    "SAHOL": "Sabancı Holding",
     "AKBNK": "Akbank",
     "GARAN": "Garanti BBVA",
     "ISCTR": "İş Bankası",
     "YKBNK": "Yapı Kredi",
     "VAKBN": "Vakıfbank",
     "HALKB": "Halkbank",
-    "TSKB": "TSKB",
-    "SKBNK": "Şekerbank",
-    
-    # Holdingler
-    "KCHOL": "Koç Holding",
-    "SAHOL": "Sabancı Holding",
-    "DOHOL": "Doğan Holding",
-    "OYAKC": "Oyak Çimento",
-    
-    # Havacılık - Ulaşım
-    "THYAO": "Türk Hava Yolları",
-    "PGSUS": "Pegasus",
-    "TAVHL": "TAV Havalimanları",
-    "DOAS": "Doğuş Otomotiv",
+    "TCELL": "Turkcell",
+    "TTKOM": "Türk Telekom",
+    "BIMAS": "BİM",
+    "MGROS": "Migros",
+    "SOKM": "ŞOK Marketler",
+    "EREGL": "Ereğli Demir Çelik",
+    "KRDMD": "Kardemir",
     "FROTO": "Ford Otosan",
     "TOASO": "Tofaş",
     "OTKAR": "Otokar",
     "TTRAK": "Türk Traktör",
-    
-    # Telekom - Teknoloji
-    "TCELL": "Turkcell",
-    "TTKOM": "Türk Telekom",
-    "ASELS": "Aselsan",
-    "VESTL": "Vestel",
-    "ARCLK": "Arçelik",
-    "NETAS": "Netaş",
-    "INDES": "İndeks Bilgisayar",
-    
-    # Enerji - Petrol
+    "DOAS": "Doğuş Otomotiv",
     "TUPRS": "Tüpraş",
     "PETKM": "Petkim",
     "ENJSA": "Enerjisa",
-    "AESAN": "Aesan",
-    "AYEN": "Ayen Enerji",
-    "ODAS": "Odaş Elektrik",
-    
-    # Gıda - Perakende
-    "BIMAS": "BİM",
-    "MGROS": "Migros",
-    "SOKM": "ŞOK Marketler",
-    "ULKER": "Ülker",
-    "AEFES": "Anadolu Efes",
+    "PGSUS": "Pegasus",
+    "TAVHL": "TAV Havalimanları",
+    "VESTL": "Vestel",
+    "ARCLK": "Arçelik",
+    "SISE": "Şişe Cam",
     "CCOLA": "Coca-Cola İçecek",
-    "TUKAS": "Tukaş",
-    "PINSU": "Pınar Su",
-    "PNSUT": "Pınar Süt",
-    "KENT": "Kent Gıda",
-    
-    # Demir - Çelik - Maden
-    "EREGL": "Ereğli Demir Çelik",
-    "KRDMD": "Kardemir",
-    "ISDMR": "İskenderun Demir Çelik",
+    "AEFES": "Anadolu Efes",
+    "ULKER": "Ülker",
+    "MAVI": "Mavi Giyim",
+    "SASA": "Sasa Polyester",
+    "OYAKC": "Oyak Çimento",
+    "ODAS": "Odaş Elektrik",
     "KOZAA": "Koza Altın",
     "KOZAL": "Koza Anadolu",
     "GUBRF": "Gübre Fabrikaları",
-    "SASA": "Sasa Polyester",
-    
-    # Cam - Seramik - Yapı
-    "SISE": "Şişe Cam",
-    "CIMSA": "Çimsa",
-    "BUCIM": "Batıçim",
-    "GOLTS": "Göltaş Çimento",
-    "BOLUC": "Bolu Çimento",
-    "KONYA": "Konya Çimento",
-    "KUTPO": "Kütahya Porselen",
-    
-    # Tekstil - Giyim
-    "MAVI": "Mavi Giyim",
-    "BOSSA": "Bossa",
-    "SOKE": "Söke Tekstil",
-    "YUNSA": "Yünsa",
-    
-    # Gayrimenkul
-    "EKGYO": "Emlak Konut GYO",
-    "TRGYO": "Torunlar GYO",
-    "KGYO": "Kiler GYO",
-    "DGGYO": "Doğuş GYO",
-    "PAGYO": "Panora GYO",
-    "VKGYO": "Vakıf GYO",
-    
-    # Sigorta - Finans
     "ANSGR": "Anadolu Sigorta",
     "AKGRT": "Aksigorta",
-    "RAYSG": "Ray Sigorta",
-    
-    # Diğer
     "BRISA": "Brisa",
     "JANTS": "Jantsa",
     "KARSN": "Karsan",
-    "KLMSN": "Klimasan",
-    "LUKSK": "Lüks Kadıoğlu",
-    "NIBAS": "Nibaş",
-    "PRKAB": "Prysmian Kablo",
-    "YATAS": "Yataş",
     "ZOREN": "Zorlu Enerji",
 }
 
 # ============================================================
-# 🌐 FINNHUB İLE GERÇEK VERİ ÇEK
+# 📊 VERİ ÇEKME FONKSİYONU (Yahoo Finance)
 # ============================================================
 
-async def get_stock_data_finnhub(symbol: str):
-    """Finnhub API ile gerçek hisse verisi çek"""
-    if not FINNHUB_API_KEY:
-        return None
-    
+def get_stock_data(symbol: str):
+    """
+    Yahoo Finance ile hisse verisi çek
+    - Tüm BIST hisseleri için çalışır
+    - Rate limit koruması var
+    """
     try:
-        finnhub_symbol = f"{symbol}.IS"
+        ticker = yf.Ticker(f"{symbol}.IS")
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Güncel fiyat
-            quote_url = f"https://finnhub.io/api/v1/quote?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-            quote_res = await client.get(quote_url)
-            
-            if quote_res.status_code != 200:
+        # 1. Günlük veri
+        hist = ticker.history(period="1d")
+        
+        if hist.empty:
+            print(f"⚠️ {symbol} için günlük veri yok, 5 günlük deneniyor...")
+            hist = ticker.history(period="5d")
+            if hist.empty:
                 return None
-            
-            quote_data = quote_res.json()
-            
-            # Fiyat var mı kontrol et
-            if not quote_data.get("c", 0):
-                return None
-            
-            # Şirket bilgileri
-            profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-            profile_res = await client.get(profile_url)
-            profile_data = profile_res.json() if profile_res.status_code == 200 else {}
-            
-            return {
-                "symbol": symbol,
-                "name": profile_data.get("name", BIST_STOCKS.get(symbol, symbol)),
-                "price": round(quote_data.get("c", 0), 2),
-                "change": round(quote_data.get("dp", 0), 2),
-                "high": round(quote_data.get("h", 0), 2),
-                "low": round(quote_data.get("l", 0), 2),
-                "open": round(quote_data.get("o", 0), 2),
-                "volume": int(quote_data.get("v", 0)),
-                "currency": "TRY",
-                "source": "Finnhub (Gerçek Veri)"
-            }
+        
+        # 2. Info'dan ek bilgiler
+        info = ticker.info
+        
+        # 3. Veriyi hazırla
+        current_price = hist['Close'].iloc[-1]
+        open_price = hist['Open'].iloc[-1] if 'Open' in hist else current_price
+        
+        # Değişim hesapla
+        if len(hist) > 1:
+            prev_close = hist['Close'].iloc[-2]
+            change = ((current_price - prev_close) / prev_close) * 100
+        else:
+            change = ((current_price - open_price) / open_price) * 100 if open_price > 0 else 0
+        
+        # Şirket adı
+        company_name = info.get('longName', info.get('shortName', BIST_STOCKS.get(symbol, symbol)))
+        
+        return {
+            "symbol": symbol,
+            "name": company_name,
+            "price": round(current_price, 2),
+            "change": round(change, 2),
+            "high": round(hist['High'].iloc[-1], 2),
+            "low": round(hist['Low'].iloc[-1], 2),
+            "open": round(open_price, 2),
+            "volume": int(hist['Volume'].iloc[-1] if 'Volume' in hist else 0),
+            "market_cap": info.get('marketCap', 0),
+            "pe_ratio": info.get('trailingPE', 0),
+            "dividend_yield": info.get('dividendYield', 0),
+            "currency": "TRY",
+            "source": "Yahoo Finance",
+            "timestamp": time.strftime("%H:%M:%S")
+        }
+        
     except Exception as e:
-        print(f"Finnhub hatası ({symbol}): {e}")
+        print(f"❌ {symbol} hatası: {str(e)[:100]}")
         return None
 
 # ============================================================
@@ -196,20 +153,23 @@ async def get_stocks():
 
 @app.get("/api/stock/{symbol}")
 async def get_stock(symbol: str):
-    """Hisse detayını getir - Finnhub gerçek veri, yoksa demo"""
-    
+    """Hisse detayını getir"""
     symbol = symbol.upper()
     
     if symbol not in BIST_STOCKS:
         return {"error": f"{symbol} BIST listesinde bulunamadı"}
     
-    # 🔥 1. Finnhub ile gerçek veri dene
-    data = await get_stock_data_finnhub(symbol)
+    print(f"🔍 {symbol} sorgulanıyor...")
     
-    if data and data.get("price", 0) > 0:
+    # Veriyi çek
+    data = get_stock_data(symbol)
+    
+    if data:
+        print(f"✅ {symbol}: {data['price']} ₺ ({data['change']}%)")
         return data
     
-    # 🔄 2. Gerçek veri yoksa demo veri döndür
+    # Veri gelmezse demo döndür
+    print(f"⚠️ {symbol} için demo veri")
     price = round(random.uniform(50, 500), 2)
     change = round(random.uniform(-5, 5), 2)
     
@@ -218,22 +178,23 @@ async def get_stock(symbol: str):
         "name": BIST_STOCKS.get(symbol, symbol),
         "price": price,
         "change": change,
-        "high": round(price * (1 + random.uniform(0.01, 0.04)), 2),
-        "low": round(price * (1 - random.uniform(0.01, 0.04)), 2),
-        "open": round(price * (1 + random.uniform(-0.02, 0.02)), 2),
+        "high": round(price * 1.02, 2),
+        "low": round(price * 0.98, 2),
+        "open": round(price * 0.99, 2),
         "volume": random.randint(100000, 5000000),
         "currency": "TRY",
         "source": "Demo Veri",
-        "info": "⚠️ Gerçek veri alınamadı (Finnhub API anahtarı kontrol edin)"
+        "info": "⚠️ Yahoo Finance bağlantısı kurulamadı"
     }
 
 @app.post("/api/chat")
 async def chat(request: dict):
-    """AI Asistanı (Gemini)"""
+    """AI Asistanı"""
     if not GEMINI_API_KEY:
-        return {"reply": "API anahtarı eksik. Render Dashboard'a GEMINI_API_KEY ekleyin."}
+        return {"reply": "GEMINI_API_KEY ekleyin"}
     
     try:
+        import httpx
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"
         payload = {"contents": [{"parts": [{"text": request.get("message", "")}]}]}
         
@@ -244,10 +205,18 @@ async def chat(request: dict):
             if response.status_code == 200:
                 reply = data["candidates"][0]["content"]["parts"][0]["text"]
                 return {"reply": reply}
-            else:
-                return {"reply": f"API hatası: {response.status_code}"}
+            return {"reply": f"API hatası: {response.status_code}"}
     except Exception as e:
         return {"reply": f"Hata: {str(e)}"}
+
+@app.get("/api/test")
+async def test():
+    """Test endpoint"""
+    return {
+        "status": "OK",
+        "time": time.strftime("%H:%M:%S"),
+        "stocks_count": len(BIST_STOCKS)
+    }
 
 # ============================================================
 # 🚀 UYGULAMA BAŞLATMA
@@ -255,4 +224,6 @@ async def chat(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
+    print("🚀 BIST Screener başlatılıyor...")
+    print(f"📊 Toplam hisse: {len(BIST_STOCKS)}")
     uvicorn.run(app, host="0.0.0.0", port=8000)

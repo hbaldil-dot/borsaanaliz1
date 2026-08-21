@@ -1,6 +1,7 @@
 import os
 import re
 import httpx
+import yfinance as yf
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -15,12 +16,45 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
 
+# Sadece hisse kartı için veri çeken uç nokta (Gemini çalıştırmaz)
+@app.get("/api/stock/{symbol}")
+async def get_stock_info(symbol: str):
+    try:
+        ticker_symbol = f"{symbol.upper()}.IS" if not symbol.endswith(".IS") else symbol.upper()
+        ticker = yf.Ticker(ticker_symbol)
+        
+        # Anlık Fiyat Verileri
+        history = ticker.history(period="1d")
+        if history.empty:
+            return {"error": "Hisse verisi bulunamadı."}
+        
+        current_price = history['Close'].iloc[-1]
+        
+        # Bilanço / Kâr Durumu Verileri
+        financials = ticker.financials
+        profit_data = {}
+        
+        if financials is not None and not financials.empty:
+            # Net Income (Net Kâr) kalemi varsa son 3 yılı al
+            if 'Net Income' in financials.index:
+                net_incomes = financials.loc['Net Income']
+                for date, val in net_incomes.items():
+                    year = str(date.year)
+                    profit_data[year] = f"{val / 1_000_000:,.2f} M TL"
+        
+        return {
+            "symbol": symbol.upper(),
+            "price": f"{current_price:.2f} TL",
+            "profits": profit_data if profit_data else "Bilanço verisi çekilemedi"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     if not GEMINI_API_KEY:
-        return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!", "retry_after": 0}
+        return {"reply": "Hata: GEMINI_API_KEY tanımlı değil!", "retry_after": 0}
 
-    # Gemini REST API Endpoint
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": request.message}]}]}
 
@@ -29,12 +63,35 @@ async def chat(request: ChatRequest):
             response = await client.post(url, json=payload, timeout=30.0)
             data = response.json()
 
-            # 429 Rate Limit Kontrolü
             if response.status_code == 429:
-                error_msg = data.get("error", {}).get("message", "")
-                match = re.search(r"retry in (\d+\.?\d*)s", error_msg)
-                wait_seconds = int(float(match.group(1))) + 2 if match else 40
-                
+                return {"reply": "Ücretsiz kullanım kotasına ulaşıldı.", "retry_after": 40}
+
+            if response.status_code != 200:
+                return {"reply": f"Gemini API Hatası ({response.status_code})", "retry_after": 0}
+
+            ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
+
+            if MONGO_URI:
+                try:
+                    mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+                    db = mongo_client["borsaanaliz1_db"]
+                    await db["chat_history"].insert_one({
+                        "user_id": request.user_id,
+                        "user_message": request.message,
+                        "bot_response": ai_reply
+                    })
+                    mongo_client.close()
+                except Exception as db_err:
+                    print(f"DB Kayıt Hatası: {db_err}")
+
+            return {"reply": ai_reply, "retry_after": 0}
+
+        except Exception as e:
+            return {"reply": f"Sunucu Bağlantı Hatası: {str(e)}", "retry_after": 0}
+
+@app.get("/")
+async def read_index():
+    return FileResponse("index.html")                
                 return {
                     "reply": "Ücretsiz kullanım kotasına ulaşıldı. Lütfen geri sayımın bitmesini bekleyin.",
                     "retry_after": wait_seconds

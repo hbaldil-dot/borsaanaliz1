@@ -49,16 +49,6 @@ BIST_STOCKS = {
     "SISE": "Şişe Cam",
     "VESTL": "Vestel",
     "ARCLK": "Arçelik",
-    "ENJSA": "Enerjisa",
-    "PGSUS": "Pegasus",
-    "TAVHL": "TAV Havalimanları",
-    "DOAS": "Doğuş Otomotiv",
-    "MAVI": "Mavi Giyim",
-    "SASA": "Sasa Polyester",
-    "CCOLA": "Coca-Cola İçecek",
-    "AEFES": "Anadolu Efes",
-    "ODAS": "Odaş Elektrik",
-    "OYAKC": "Oyak Çimento",
 }
 
 # ============================================================
@@ -99,27 +89,6 @@ async def get_stock(symbol: str):
         "currency": "TRY",
         "source": "Demo Veri",
         "info": "⚠️ Gerçek veri alınamadığı için demo veri gösteriliyor"
-    }
-
-@app.get("/api/stock/{symbol}/history")
-async def get_stock_history(symbol: str):
-    """Hisse geçmiş verileri (Demo)"""
-    
-    symbol = symbol.upper()
-    
-    dates = []
-    prices = []
-    base_price = random.uniform(50, 500)
-    
-    for i in range(30, 0, -1):
-        dates.append(f"2024-{i:02d}-01")
-        prices.append(round(base_price * (1 + random.uniform(-0.2, 0.2)), 2))
-    
-    return {
-        "symbol": symbol,
-        "dates": dates,
-        "prices": prices,
-        "source": "Demo Veri"
     }
 
 @app.post("/api/chat")

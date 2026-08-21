@@ -1,6 +1,5 @@
 import os
 import httpx
-import re
 import pandas as pd
 import yfinance as yf
 from datetime import date
@@ -22,62 +21,83 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
 
-async def fetch_live_bist_list():
-    """BIST üzerindeki tüm aktif hisse kodlarını canlı olarak çeker."""
-    url = "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/default.aspx"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            res = await client.get(url)
-            # Sayfa içeriğindeki .HEPSİ / .IS uzantılı BIST sembollerini yakalar
-            raw_symbols = re.findall(r'data-value="([A-Z0-9]+)\.E"', res.text)
-            if not raw_symbols:
-                # Alternatif regex arama
-                raw_symbols = re.findall(r'/hisse/([A-Z0-9]+)"', res.text)
-            
-            symbols = sorted(list(set(raw_symbols)))
-            if symbols:
-                return symbols
-        except Exception as e:
-            print(f"Canlı hisse listesi çekme hatası: {e}")
-            
-    # Eğer web scraping engellenirse yedek dinamik fallback
-    return ["AKBNK", "ARCLK", "ASELS", "BIMAS", "EREGL", "FROTO", "GARAN", "KCHOL", "SASA", "THYAO", "TUPRS"]
+# Borsa İstanbul Tüm Aktif Hisse Senetleri
+FULL_BIST_LIST = [
+    "A1CAP", "AAV", "AEE", "AEFES", "AFYON", "AGESA", "AGHOL", "AGROT", "AHGAZ", "AKBNK",
+    "AKCNS", "AKFGY", "AKFYE", "AKGRT", "AKMGH", "AKSA", "AKSEN", "AKSGY", "AKSUE", "ALARK",
+    "ALBRK", "ALCAR", "ALCTL", "ALFAS", "ALGYO", "ALKA", "ALKIM", "ALMAD", "ALTNY", "ALVES",
+    "ANELE", "ANGEN", "ANHYT", "ANSGR", "ARASE", "ARCLK", "ARDYZ", "ARENA", "ARSAN", "ARTMS",
+    "ARZUM", "ASELS", "ASTOR", "ATAKP", "ATATP", "ATEKS", "ATSYH", "AVOD", "AVPGY", "AVTUR",
+    "AYCES", "AYDEM", "AYGAZ", "AZTEK", "BAGFS", "BAKAB", "BALAT", "BANVT", "BARMA", "BATIS",
+    "BEYAZ", "BFREN", "BIENP", "BIGCHEFS", "BIMAS", "BINHO", "BIOEN", "BIZIM", "BJKAS", "BLCYT",
+    "BNTAS", "BOBET", "BORLS", "BORSK", "BOSSA", "BRISA", "BRKO", "BRKSN", "BRKVY", "BRSAN",
+    "BRYAT", "BSOKE", "BTCIM", "BUCIM", "BURCE", "BURVA", "BVSAN", "BYDNR", "CAHIT", "CANTE",
+    "CASA", "CCOLA", "CELHA", "CEMAS", "CEMTS", "CMBTN", "CMENT", "CONSE", "COSMO", "CRFSA",
+    "CUSAN", "CVKMD", "CWENE", "DAGI", "DAPGM", "DARDL", "DGATE", "DGGYO", "DGNMO", "DITAS",
+    "DMRGD", "DMSAS", "DNISI", "DOAS", "DOCO", "DOGUB", "DOHOL", "DOKTA", "DURDO", "DYOBY",
+    "EBEBK", "ECILC", "ECZYT", "EDATA", "EDIP", "EGEEN", "EGGUB", "EGPRO", "EGSER", "EKGYO",
+    "EKOS", "EKSUN", "ELITE", "EMKEL", "ENJSA", "ENKAI", "ENSRI", "EPLAS", "ERCB", "EREGL",
+    "ERSU", "ESCAR", "ESEN", "ETILR", "EUPWR", "EUREK", "EUYO", "EYGYO", "FADE", "FENER",
+    "FLAP", "FMIZP", "FONET", "FORMT", "FORTE", "FRIGO", "FROTO", "FZLGY", "GARAN", "GARFA",
+    "GBDEV", "GENIL", "GENTS", "GEREL", "GESAN", "GIPTA", "GLBMD", "GLYHO", "GMTAS", "GOKNR",
+    "GOLTS", "GOODY", "GOZDE", "GRSEL", "GRTHO", "GSDHO", "GSRAY", "GUBRF", "GWIND", "GZNMI",
+    "HALKB", "HATSN", "HEDEF", "HEKTS", "HKTM", "HLGYO", "HRKET", "HTTBT", "HUBVC", "HUNER",
+    "HURGZ", "ICBCT", "ICUGS", "IDEAS", "IEYHO", "IHAAS", "IHEVA", "IHGZT", "IHLAS", "IHLGM",
+    "INGRM", "INTEM", "INVEO", "INVES", "IPEKE", "ISATR", "ISBTR", "ISCTR", "ISDMR", "ISFIN",
+    "ISGSY", "ISGYO", "ISKPL", "ISMEN", "ISSEN", "ITEKS", "IWW", "IZENR", "IZINV", "IZMDC",
+    "JANTS", "KAPEI", "KARSN", "KARTN", "KATMR", "KAYSE", "KBORU", "KCAER", "KCHOL", "KENT",
+    "KFEIN", "KGYO", "KIMMR", "KLGYO", "KLMSN", "KLNMA", "KLRHO", "KLSER", "KMPUR", "KNFRT",
+    "KONTR", "KONYE", "KORDS", "KOZAA", "KOZAL", "KRDMD", "KRGYO", "KRONT", "KRPLS", "KRSTL",
+    "KRTEK", "KSTUR", "KTLEV", "KTSKR", "KUTPO", "KUYAŞ", "LIDER", "LIDFA", "LINK", "LKMNH",
+    "LMKDC", "LOGOS", "LRSHO", "LUKSK", "MAALT", "MACKO", "MAKIM", "MAKTK", "MANAS", "MARKA",
+    "MAVI", "MEDTR", "MEGAP", "MEGMT", "MEPET", "MERCN", "MERIT", "MERKO", "METRO", "METUR",
+    "MGROS", "MHRGY", "MIATK", "MMPKT", "MPARK", "MRGYO", "MRSHL", "MSGYO", "MTRKS", "MTRYO",
+    "MZHLD", "NATEN", "NETAS", "NIBAS", "NTGAZ", "NUGYO", "NUHCM", "OBAMS", "OBASE", "ODAS",
+    "OFSYM", "ONCSM", "ORCA", "ORGE", "ORMA", "OSMEN", "OSTIM", "OTKAR", "OTTO", "OYAKC",
+    "OYYAT", "OZKGY", "OZRDN", "OZSUB", "PAGYO", "PAMEL", "PAPIL", "PARSN", "PASEU", "PATEK",
+    "PCILT", "PEKGY", "PENGD", "PENTA", "PETKM", "PETUN", "PGSUS", "PINSU", "PKART", "PKENT",
+    "PLTUR", "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS", "PRKAB", "PRKME", "PSGYO", "RAYSG",
+    "REEDR", "RGYAS", "RNPOL", "RODRG", "RUBNS", "RYGYO", "RYSAS", "SAHOL", "SAMAT", "SANEL",
+    "SANFM", "SANKO", "SARKY", "SASA", "SAYAS", "SDTTR", "SEGMN", "SEKFK", "SEKUR", "SELEC",
+    "SELVA", "SEYKM", "SILVR", "SISE", "SKBNK", "SKTAS", "SMART", "SMRTG", "SNAAM", "SNGYO",
+    "SNICA", "SNKRN", "SOKE", "SOKM", "SONME", "SRVGY", "SUMAS", "SUNTK", "SURGY", "SUWEN",
+    "TABGD", "TARKM", "TATEN", "TATGD", "TAVHL", "TBORG", "TCELL", "TDGYO", "TEKTU", "TERA",
+    "TETMT", "THYAO", "TKFEN", "TKNSA", "TLMAN", "TMPOL", "TMSN", "TNZTP", "TOASO", "TRCAS",
+    "TRGYO", "TRILC", "TSKB", "TSPOR", "TTKOM", "TTRAK", "TUCLK", "TUKAS", "TUPRS", "TURGG",
+    "TURSG", "UFUK", "ULAS", "ULKER", "UNLU", "USAK", "VAKBN", "VAKFN", "VAKKO", "VANET",
+    "VBTYZ", "VERTU", "VERUS", "VESBE", "VESTL", "VKFYO", "VKGYO", "YAPRK", "YATAS", "YAYLA",
+    "YEOTK", "YGYO", "YKBNK", "YONGA", "YYAPI", "YYLGD", "YUNSA", "ZEDUR", "ZRGYO"
+]
 
-async def get_daily_stock_list():
-    """Günde sadece 1 kere listeyi günceller, gün boyu aynı listeyi kullanır."""
+def get_daily_stock_list():
+    """Günde 1 kez önbelleği tazeler ve tam hisse listesini sunar"""
     global CACHED_STOCK_LIST, LAST_UPDATE_DATE
     today = date.today()
 
-    # Liste hiç çekilmediyse veya gün değiştiyse canlı güncelle
     if LAST_UPDATE_DATE != today or not CACHED_STOCK_LIST:
-        print(f"[{today}] Borsa İstanbul güncel hisse listesi internetten çekiliyor...")
-        CACHED_STOCK_LIST = await fetch_live_bist_list()
+        CACHED_STOCK_LIST = sorted(list(set(FULL_BIST_LIST)))
         LAST_UPDATE_DATE = today
-        print(f"[{today}] Toplam {len(CACHED_STOCK_LIST)} adet güncel BIST hissesi hafızaya alındı.")
+        print(f"[{today}] BIST Hisse listesi ({len(CACHED_STOCK_LIST)} adet) hafızaya yüklendi.")
 
     return CACHED_STOCK_LIST
 
 @app.get("/api/stocks/list")
 async def get_stock_list():
-    """Günün güncel hisse listesini döndürür"""
-    stocks = await get_daily_stock_list()
+    stocks = get_daily_stock_list()
     return {"stocks": stocks}
 
 @app.get("/api/stock/{symbol}")
 async def get_stock_info(symbol: str):
-    """Seçilen hisse tıklandığında anlık/15dk gecikmeli veriyi çeker"""
     try:
         ticker_symbol = f"{symbol.upper()}.IS" if not symbol.endswith(".IS") else symbol.upper()
         ticker = yf.Ticker(ticker_symbol)
         
-        # 15 dk gecikmeli anlık fiyat verisi
         history = ticker.history(period="1d")
         if history.empty:
-            return {"error": "Hisse verisi Yahoo Finance üzerinde bulunamadı."}
+            return {"error": "Hisse verisi bulunamadı."}
         
         current_price = history['Close'].iloc[-1]
         
-        # Bilanço Kâr Verileri
         financials = ticker.financials
         profit_data = {}
         

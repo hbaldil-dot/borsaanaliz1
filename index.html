@@ -9,50 +9,50 @@
         body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         .main-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; height: 85vh; }
         
+        /* Sol Panel */
         .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
-        .search-box { display: flex; gap: 5px; }
-        .search-box input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 5px; text-transform: uppercase; }
-        .search-box button { padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-weight: bold; font-size: 14px; color: #333; }
+        input[type="text"], select { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; text-transform: uppercase; }
         
-        .stock-list { display: flex; gap: 5px; flex-wrap: wrap; }
-        .stock-btn { padding: 6px 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; }
-        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; overflow-y: auto; }
+        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; overflow-y: auto; margin-top: 10px; }
         
+        /* Sağ Panel */
         .chat-container { flex: 2; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .chat-box { flex: 1; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
         .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 5px; max-width: 80%; }
         .user { background: #007bff; color: white; margin-left: auto; }
         .bot { background: #e9ecef; color: black; }
         .input-box { display: flex; gap: 10px; }
-        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .input-box input { flex: 1; text-transform: none; }
         button.send-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="main-container">
-    <!-- SOL TARAF: Borsa Hisseleri & Arama -->
+    <!-- SOL TARAF: Borsa Hisseleri & Arama/Seçim -->
     <div class="sidebar">
         <h3>BIST Hisse Sorgula</h3>
-        <div class="search-box">
-            <input type="text" id="symbolInput" placeholder="Hisse Kodu (Örn: ASELS)" onkeypress="if(event.key==='Enter') searchCustomStock()">
-            <button onclick="searchCustomStock()">Getir</button>
+        
+        <!-- Otomatik Tamamlamalı Arama Kutusu -->
+        <div class="form-group">
+            <label for="stockSearch">Arayarak Tamamla:</label>
+            <input type="text" id="stockSearch" list="stockOptions" placeholder="Hisse Yazın (Örn: THY...)" oninput="handleSearchInput(this.value)">
+            <datalist id="stockOptions"></datalist>
         </div>
 
-        <div class="stock-list">
-            <button class="stock-btn" onclick="fetchStock('THYAO')">THYAO</button>
-            <button class="stock-btn" onclick="fetchStock('GARAN')">GARAN</button>
-            <button class="stock-btn" onclick="fetchStock('EREGL')">EREGL</button>
-            <button class="stock-btn" onclick="fetchStock('AKBNK')">AKBNK</button>
-            <button class="stock-btn" onclick="fetchStock('SASA')">SASA</button>
-            <button class="stock-btn" onclick="fetchStock('ASELS')">ASELS</button>
-            <button class="stock-btn" onclick="fetchStock('KCHOL')">KCHOL</button>
-            <button class="stock-btn" onclick="fetchStock('TUPRS')">TUPRS</button>
+        <!-- Roll-Down Açılır Liste -->
+        <div class="form-group">
+            <label for="stockSelect">Tüm Hisse Listesi (Açılır Menü):</label>
+            <select id="stockSelect" onchange="fetchStock(this.value)">
+                <option value="">-- Hisse Seçiniz --</option>
+            </select>
         </div>
 
         <div class="stock-card" id="stockCard">
-            <h4>Hisse Seçin veya Arayın</h4>
-            <p>Son 3 yıla ait kâr durumu ve anlık fiyat için yukarıya BIST hisse kodunu yazabilirsiniz.</p>
+            <h4>Hisse Seçin</h4>
+            <p>Son 3 yıla ait kâr durumu ve anlık fiyat için listeden seçim yapabilir veya arayabilirsiniz.</p>
         </div>
     </div>
 
@@ -68,16 +68,48 @@
 </div>
 
 <script>
-    function searchCustomStock() {
-        const symbol = document.getElementById("symbolInput").value.trim();
-        if (symbol) {
-            fetchStock(symbol);
+    let globalStockList = [];
+
+    // Sayfa açıldığında günlük hisse listesini 1 defa çeker
+    window.onload = async function() {
+        try {
+            const res = await fetch('/api/stocks/list');
+            const data = await res.json();
+            globalStockList = data.stocks || [];
+
+            const selectEl = document.getElementById("stockSelect");
+            const datalistEl = document.getElementById("stockOptions");
+
+            globalStockList.forEach(symbol => {
+                // Dropdown Doldurma
+                const optSelect = document.createElement("option");
+                optSelect.value = symbol;
+                optSelect.textContent = symbol;
+                selectEl.appendChild(optSelect);
+
+                // Autocomplete (Datalist) Doldurma
+                const optData = document.createElement("option");
+                optData.value = symbol;
+                datalistEl.appendChild(optData);
+            });
+        } catch (err) {
+            console.error("Hisse listesi alınamadı:", err);
+        }
+    };
+
+    function handleSearchInput(val) {
+        const cleanVal = val.trim().toUpperCase();
+        if (globalStockList.includes(cleanVal)) {
+            document.getElementById("stockSelect").value = cleanVal;
+            fetchStock(cleanVal);
         }
     }
 
     async function fetchStock(symbol) {
+        if (!symbol) return;
+        
         const card = document.getElementById("stockCard");
-        card.innerHTML = `<p><strong>${symbol.toUpperCase()}</strong> verileri yükleniyor...</p>`;
+        card.innerHTML = `<p><strong>${symbol}</strong> verileri yükleniyor...</p>`;
 
         try {
             const res = await fetch(`/api/stock/${symbol}`);

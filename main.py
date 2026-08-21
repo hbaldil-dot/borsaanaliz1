@@ -1,5 +1,6 @@
 import os
 import httpx
+import re
 import pandas as pd
 import yfinance as yf
 from datetime import date
@@ -13,7 +14,7 @@ app = FastAPI()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGO_URI = os.getenv("MONGODB_URI")
 
-# Günlük Hafıza (Cache)
+# Günlük Önbellek (Cache)
 CACHED_STOCK_LIST = []
 LAST_UPDATE_DATE = None
 
@@ -21,8 +22,8 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
 
-# Borsa İstanbul Tüm Aktif Hisse Senetleri
-FULL_BIST_LIST = [
+# İnternet bağlantısı kesilirse kullanılacak yedek (fallback) hisse listesi
+FALLBACK_BIST_LIST = [
     "A1CAP", "AAV", "AEE", "AEFES", "AFYON", "AGESA", "AGHOL", "AGROT", "AHGAZ", "AKBNK",
     "AKCNS", "AKFGY", "AKFYE", "AKGRT", "AKMGH", "AKSA", "AKSEN", "AKSGY", "AKSUE", "ALARK",
     "ALBRK", "ALCAR", "ALCTL", "ALFAS", "ALGYO", "ALKA", "ALKIM", "ALMAD", "ALTNY", "ALVES",
@@ -69,21 +70,59 @@ FULL_BIST_LIST = [
     "YEOTK", "YGYO", "YKBNK", "YONGA", "YYAPI", "YYLGD", "YUNSA", "ZEDUR", "ZRGYO"
 ]
 
-def get_daily_stock_list():
-    """Günde 1 kez önbelleği tazeler ve tam hisse listesini sunar"""
+async def fetch_live_bist_symbols():
+    """KAP / BIST resmi kaynaklarından güncel hisse kodlarını canlı çeker"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    # 1. Deneme: KAP (Kamuyu Aydınlatma Platformu) Resmi API
+    try:
+        url = "https://www.kap.org.tr/tr/api/dis/bist-sirketler"
+        async with httpx.AsyncClient(headers=headers, timeout=10.0) as client:
+            res = await client.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                symbols = [item.get("kod") for item in data if item.get("kod")]
+                symbols = [s.strip().upper() for s in symbols if s and len(s) >= 3]
+                if len(symbols) > 100:
+                    print(f"KAP API üzerinden {len(symbols)} adet güncel hisse çekildi.")
+                    return sorted(list(set(symbols)))
+    except Exception as e:
+        print(f"KAP API canlı çekim hatası: {e}")
+
+    # 2. Deneme: BIST Veri Servisi Alternatifi
+    try:
+        url = "https://www.borsaistanbul.com/tr/sayfa/26/pay-piyasasi-sirketleri"
+        async with httpx.AsyncClient(headers=headers, timeout=10.0) as client:
+            res = await client.get(url)
+            if res.status_code == 200:
+                raw_symbols = re.findall(r'([A-Z0-9]{3,5})\.E', res.text)
+                if len(raw_symbols) > 100:
+                    print(f"Borsa İstanbul sitesinden {len(raw_symbols)} hisse çekildi.")
+                    return sorted(list(set(raw_symbols)))
+    except Exception as e:
+        print(f"Borsa Istanbul canlı çekim hatası: {e}")
+
+    # Canlı çekim başarısız olursa yedek listeyi dön
+    print("Canlı servis ulaşılamadı. Yedek BIST listesi kullanılıyor.")
+    return sorted(list(set(FALLBACK_BIST_LIST)))
+
+async def get_daily_stock_list():
+    """Günde 1 kez canlı güncelleme yapar ve belleğe alır"""
     global CACHED_STOCK_LIST, LAST_UPDATE_DATE
     today = date.today()
 
     if LAST_UPDATE_DATE != today or not CACHED_STOCK_LIST:
-        CACHED_STOCK_LIST = sorted(list(set(FULL_BIST_LIST)))
+        print(f"[{today}] Günün ilk isteği: BIST Hisse senetleri canlı olarak sorgulanıyor...")
+        CACHED_STOCK_LIST = await fetch_live_bist_symbols()
         LAST_UPDATE_DATE = today
-        print(f"[{today}] BIST Hisse listesi ({len(CACHED_STOCK_LIST)} adet) hafızaya yüklendi.")
 
     return CACHED_STOCK_LIST
 
 @app.get("/api/stocks/list")
 async def get_stock_list():
-    stocks = get_daily_stock_list()
+    stocks = await get_daily_stock_list()
     return {"stocks": stocks}
 
 @app.get("/api/stock/{symbol}")
@@ -92,12 +131,14 @@ async def get_stock_info(symbol: str):
         ticker_symbol = f"{symbol.upper()}.IS" if not symbol.endswith(".IS") else symbol.upper()
         ticker = yf.Ticker(ticker_symbol)
         
+        # 15 dakika gecikmeli canlı borsa verisi
         history = ticker.history(period="1d")
         if history.empty:
             return {"error": "Hisse verisi bulunamadı."}
         
         current_price = history['Close'].iloc[-1]
         
+        # Yıllık Bilanço Kâr Verileri
         financials = ticker.financials
         profit_data = {}
         

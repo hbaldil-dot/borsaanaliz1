@@ -9,14 +9,15 @@
         body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         .main-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; height: 85vh; }
         
-        /* Sol Panel: Borsa Verileri */
         .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
-        .stock-list { display: flex; gap: 8px; flex-wrap: wrap; }
-        .stock-btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .stock-btn:hover { background: #0056b3; }
-        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; }
+        .search-box { display: flex; gap: 5px; }
+        .search-box input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 5px; text-transform: uppercase; }
+        .search-box button { padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
         
-        /* Sağ Panel: Chat */
+        .stock-list { display: flex; gap: 5px; flex-wrap: wrap; }
+        .stock-btn { padding: 6px 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; }
+        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; overflow-y: auto; }
+        
         .chat-container { flex: 2; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .chat-box { flex: 1; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
         .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 5px; max-width: 80%; }
@@ -30,20 +31,28 @@
 <body>
 
 <div class="main-container">
-    <!-- SOL TARAF: Borsa Hisseleri & Veri Ekranı -->
+    <!-- SOL TARAF: Borsa Hisseleri & Arama -->
     <div class="sidebar">
-        <h3>BIST Hisseleri</h3>
+        <h3>BIST Hisse Sorgula</h3>
+        <div class="search-box">
+            <input type="text" id="symbolInput" placeholder="Hisse Kodu (Örn: ASELS)" onkeypress="if(event.key==='Enter') searchCustomStock()">
+            <button onclick="searchCustomStock()">Getir</button>
+        </div>
+
         <div class="stock-list">
             <button class="stock-btn" onclick="fetchStock('THYAO')">THYAO</button>
             <button class="stock-btn" onclick="fetchStock('GARAN')">GARAN</button>
             <button class="stock-btn" onclick="fetchStock('EREGL')">EREGL</button>
             <button class="stock-btn" onclick="fetchStock('AKBNK')">AKBNK</button>
             <button class="stock-btn" onclick="fetchStock('SASA')">SASA</button>
+            <button class="stock-btn" onclick="fetchStock('ASELS')">ASELS</button>
+            <button class="stock-btn" onclick="fetchStock('KCHOL')">KCHOL</button>
+            <button class="stock-btn" onclick="fetchStock('TUPRS')">TUPRS</button>
         </div>
 
         <div class="stock-card" id="stockCard">
-            <h4>Hisse Seçin</h4>
-            <p>Fiyatı ve son yıllara ait kâr durumunu görmek için yukarıdaki hisselerden birine tıklayın.</p>
+            <h4>Hisse Seçin veya Arayın</h4>
+            <p>Son 3 yıla ait kâr durumu ve anlık fiyat için yukarıya BIST hisse kodunu yazabilirsiniz.</p>
         </div>
     </div>
 
@@ -59,10 +68,16 @@
 </div>
 
 <script>
-    // Hisse Tıklandığında Veri Çeken Fonksiyon (Gemini Çağrılmaz)
+    function searchCustomStock() {
+        const symbol = document.getElementById("symbolInput").value.trim();
+        if (symbol) {
+            fetchStock(symbol);
+        }
+    }
+
     async function fetchStock(symbol) {
         const card = document.getElementById("stockCard");
-        card.innerHTML = `<p><strong>${symbol}</strong> verileri yükleniyor...</p>`;
+        card.innerHTML = `<p><strong>${symbol.toUpperCase()}</strong> verileri yükleniyor...</p>`;
 
         try {
             const res = await fetch(`/api/stock/${symbol}`);
@@ -95,7 +110,6 @@
         }
     }
 
-    // Chat Mesaj Gönderme
     async function sendMessage() {
         const input = document.getElementById("userInput");
         const chatBox = document.getElementById("chatBox");

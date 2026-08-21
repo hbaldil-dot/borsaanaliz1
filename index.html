@@ -13,9 +13,8 @@
         .form-group { display: flex; flex-direction: column; gap: 5px; position: relative; }
         label { font-weight: bold; font-size: 14px; color: #333; }
         
-        /* Aranabilir Dropdown Kutusu */
         .search-select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; text-transform: uppercase; cursor: pointer; }
-        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 220px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 0 0 5px 5px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 250px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 0 0 5px 5px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .dropdown-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; }
         .dropdown-item:hover { background-color: #007bff; color: white; }
 
@@ -38,14 +37,14 @@
         <h3>BIST Hisse Sorgula</h3>
         
         <div class="form-group">
-            <label for="stockInput">Günün Hisse Listesi (Arayın veya Seçin):</label>
-            <input type="text" id="stockInput" class="search-select" placeholder="Yükleniyor..." oninput="filterStocks()" onclick="showDropdown()" autocomplete="off">
+            <label for="stockInput">Tüm BIST Hisseleri (Arayın veya Seçin):</label>
+            <input type="text" id="stockInput" class="search-select" placeholder="Hisse Yazın veya Seçin..." oninput="filterStocks()" onclick="showDropdown()" autocomplete="off">
             <div id="dropdownMenu" class="dropdown-menu"></div>
         </div>
 
         <div class="stock-card" id="stockCard">
             <h4>Hisse Seçin</h4>
-            <p>Roll-down listeden bir hisse seçtiğinizde 15 dk gecikmeli veriler çekilecektir.</p>
+            <p>Listeden bir hisse seçtiğinizde 15 dk gecikmeli veriler çekilecektir.</p>
         </div>
     </div>
 
@@ -62,18 +61,14 @@
 <script>
     let globalStockList = [];
 
-    // Sayfa açıldığında sunucunun günde 1 kez güncellediği dinamik listeyi çeker
     window.onload = async function() {
         try {
             const res = await fetch('/api/stocks/list');
             const data = await res.json();
             globalStockList = data.stocks || [];
-            
-            document.getElementById("stockInput").placeholder = "Hisse Ara veya Aşağı Doğru Aç...";
             renderDropdown(globalStockList);
         } catch (err) {
             console.error("Hisse listesi alınamadı:", err);
-            document.getElementById("stockInput").placeholder = "Liste yüklenemedi";
         }
     };
 
@@ -91,7 +86,6 @@
             item.className = "dropdown-item";
             item.innerText = symbol;
             
-            // Seçim yapılınca veri çekme işlemi tetiklenir
             item.onclick = function() {
                 document.getElementById("stockInput").value = symbol;
                 menu.style.display = "none";
@@ -112,7 +106,6 @@
         document.getElementById("dropdownMenu").style.display = "block";
     }
 
-    // Dışarı tıklanınca açılır menüyü kapatır
     document.addEventListener("click", function(e) {
         const input = document.getElementById("stockInput");
         const menu = document.getElementById("dropdownMenu");

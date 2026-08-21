@@ -20,7 +20,8 @@ async def chat(request: ChatRequest):
     if not GEMINI_API_KEY:
         return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!", "retry_after": 0}
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
+    # Gemini REST API Endpoint
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": request.message}]}]}
 
     async with httpx.AsyncClient() as client:
@@ -35,7 +36,7 @@ async def chat(request: ChatRequest):
                 wait_seconds = int(float(match.group(1))) + 2 if match else 40
                 
                 return {
-                    "reply": f"Ücretsiz kullanım kotasına ulaşıldı. Lütfen geri sayımın bitmesini bekleyin.",
+                    "reply": "Ücretsiz kullanım kotasına ulaşıldı. Lütfen geri sayımın bitmesini bekleyin.",
                     "retry_after": wait_seconds
                 }
 
@@ -46,7 +47,6 @@ async def chat(request: ChatRequest):
             ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
 
             # MongoDB Kaydı
-            db_status = ""
             if MONGO_URI:
                 try:
                     mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
@@ -59,9 +59,9 @@ async def chat(request: ChatRequest):
                     })
                     mongo_client.close()
                 except Exception as db_err:
-                    db_status = f"\n\n[Veritabanı Kayıt Hatası: {str(db_err)}]"
+                    print(f"DB Kayıt Hatası: {db_err}")
 
-            return {"reply": ai_reply + db_status, "retry_after": 0}
+            return {"reply": ai_reply, "retry_after": 0}
 
         except Exception as e:
             return {"reply": f"Sunucu Bağlantı Hatası: {str(e)}", "retry_after": 0}

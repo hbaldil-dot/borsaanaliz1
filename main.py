@@ -1,5 +1,5 @@
 """
-BIST Screener - Yahoo Finance ile Gerçek Veri
+BIST Screener - Yahoo Finance ile Kesin Çözüm
 """
 
 import os
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="BIST Screener", version="1.0")
+app = FastAPI(title="BIST Screener", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,7 +26,7 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ============================================================
-# 📊 TÜM BIST HİSSELERİ
+# 📊 TÜM BIST HİSSELERİ (GÜNCEL)
 # ============================================================
 
 BIST_STOCKS = {
@@ -66,77 +66,114 @@ BIST_STOCKS = {
     "MAVI": "Mavi Giyim",
     "SASA": "Sasa Polyester",
     "OYAKC": "Oyak Çimento",
-    "ODAS": "Odaş Elektrik",
-    "KOZAA": "Koza Altın",
-    "KOZAL": "Koza Anadolu",
-    "GUBRF": "Gübre Fabrikaları",
-    "ANSGR": "Anadolu Sigorta",
-    "AKGRT": "Aksigorta",
-    "BRISA": "Brisa",
-    "JANTS": "Jantsa",
-    "KARSN": "Karsan",
-    "ZOREN": "Zorlu Enerji",
 }
 
 # ============================================================
-# 📊 VERİ ÇEKME FONKSİYONU (Yahoo Finance)
+# 📈 YAHOO FINANCE VERİ ÇEKME (GELİŞTİRİLMİŞ)
 # ============================================================
 
 def get_stock_data(symbol: str):
     """
-    Yahoo Finance ile hisse verisi çek
-    - Tüm BIST hisseleri için çalışır
-    - Rate limit koruması var
+    Yahoo Finance ile hisse verisi çek - Geliştirilmiş versiyon
     """
     try:
+        # 1. Ticker oluştur
         ticker = yf.Ticker(f"{symbol}.IS")
         
-        # 1. Günlük veri
-        hist = ticker.history(period="1d")
-        
-        if hist.empty:
-            print(f"⚠️ {symbol} için günlük veri yok, 5 günlük deneniyor...")
-            hist = ticker.history(period="5d")
-            if hist.empty:
-                return None
-        
-        # 2. Info'dan ek bilgiler
+        # 2. Info al
         info = ticker.info
         
-        # 3. Veriyi hazırla
-        current_price = hist['Close'].iloc[-1]
-        open_price = hist['Open'].iloc[-1] if 'Open' in hist else current_price
+        # Info kontrolü
+        if not info or 'regularMarketPrice' not in info:
+            print(f"⚠️ {symbol} info gelmedi, alternatif deneniyor...")
+            # Alternatif: history ile dene
+            hist = ticker.history(period="2d")
+            if hist.empty:
+                return None
+            current_price = hist['Close'].iloc[-1]
+            open_price = hist['Open'].iloc[-1]
+            high_price = hist['High'].iloc[-1]
+            low_price = hist['Low'].iloc[-1]
+            volume = hist['Volume'].iloc[-1] if 'Volume' in hist else 0
+            
+            # Değişim
+            if len(hist) > 1:
+                prev_close = hist['Close'].iloc[-2]
+                change = ((current_price - prev_close) / prev_close) * 100
+            else:
+                change = 0
+            
+            return {
+                "symbol": symbol,
+                "name": BIST_STOCKS.get(symbol, symbol),
+                "price": round(float(current_price), 2),
+                "change": round(float(change), 2),
+                "high": round(float(high_price), 2),
+                "low": round(float(low_price), 2),
+                "open": round(float(open_price), 2),
+                "volume": int(volume),
+                "market_cap": 0,
+                "source": "Yahoo Finance (History)",
+                "timestamp": time.strftime("%H:%M:%S")
+            }
         
-        # Değişim hesapla
-        if len(hist) > 1:
-            prev_close = hist['Close'].iloc[-2]
-            change = ((current_price - prev_close) / prev_close) * 100
-        else:
-            change = ((current_price - open_price) / open_price) * 100 if open_price > 0 else 0
+        # 3. Info'dan verileri al
+        current_price = info.get('regularMarketPrice', 0)
+        if current_price == 0:
+            current_price = info.get('currentPrice', 0)
+        
+        if current_price == 0:
+            return None
+        
+        # Değişim
+        change = info.get('regularMarketChangePercent', 0)
+        if change == 0:
+            change = info.get('changePercent', 0)
         
         # Şirket adı
-        company_name = info.get('longName', info.get('shortName', BIST_STOCKS.get(symbol, symbol)))
+        name = info.get('longName', info.get('shortName', BIST_STOCKS.get(symbol, symbol)))
         
         return {
             "symbol": symbol,
-            "name": company_name,
-            "price": round(current_price, 2),
-            "change": round(change, 2),
-            "high": round(hist['High'].iloc[-1], 2),
-            "low": round(hist['Low'].iloc[-1], 2),
-            "open": round(open_price, 2),
-            "volume": int(hist['Volume'].iloc[-1] if 'Volume' in hist else 0),
+            "name": name,
+            "price": round(float(current_price), 2),
+            "change": round(float(change), 2),
+            "high": round(float(info.get('regularMarketDayHigh', info.get('dayHigh', current_price))), 2),
+            "low": round(float(info.get('regularMarketDayLow', info.get('dayLow', current_price))), 2),
+            "open": round(float(info.get('regularMarketOpen', info.get('open', current_price))), 2),
+            "volume": int(info.get('regularMarketVolume', info.get('volume', 0))),
             "market_cap": info.get('marketCap', 0),
-            "pe_ratio": info.get('trailingPE', 0),
-            "dividend_yield": info.get('dividendYield', 0),
-            "currency": "TRY",
-            "source": "Yahoo Finance",
+            "source": "Yahoo Finance (Info)",
             "timestamp": time.strftime("%H:%M:%S")
         }
         
     except Exception as e:
         print(f"❌ {symbol} hatası: {str(e)[:100]}")
         return None
+
+# ============================================================
+# 🧪 TEST FONKSİYONU
+# ============================================================
+
+@app.get("/api/test/{symbol}")
+async def test_stock(symbol: str):
+    """Test endpoint - detaylı hata ayıklama için"""
+    symbol = symbol.upper()
+    try:
+        ticker = yf.Ticker(f"{symbol}.IS")
+        info = ticker.info
+        hist = ticker.history(period="2d")
+        
+        return {
+            "symbol": symbol,
+            "info_keys": list(info.keys())[:20] if info else [],
+            "history_empty": hist.empty,
+            "history_length": len(hist),
+            "current_price": info.get('regularMarketPrice', 'yok'),
+            "info_exists": bool(info)
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 # ============================================================
 # 🌐 API ENDPOINTLERİ
@@ -148,16 +185,14 @@ async def home():
 
 @app.get("/api/stocks")
 async def get_stocks():
-    """Tüm BIST hisselerini listele"""
     return {"stocks": list(BIST_STOCKS.keys())}
 
 @app.get("/api/stock/{symbol}")
 async def get_stock(symbol: str):
-    """Hisse detayını getir"""
     symbol = symbol.upper()
     
     if symbol not in BIST_STOCKS:
-        return {"error": f"{symbol} BIST listesinde bulunamadı"}
+        return {"error": f"{symbol} bulunamadı"}
     
     print(f"🔍 {symbol} sorgulanıyor...")
     
@@ -168,7 +203,7 @@ async def get_stock(symbol: str):
         print(f"✅ {symbol}: {data['price']} ₺ ({data['change']}%)")
         return data
     
-    # Veri gelmezse demo döndür
+    # Veri gelmezse demo
     print(f"⚠️ {symbol} için demo veri")
     price = round(random.uniform(50, 500), 2)
     change = round(random.uniform(-5, 5), 2)
@@ -182,14 +217,13 @@ async def get_stock(symbol: str):
         "low": round(price * 0.98, 2),
         "open": round(price * 0.99, 2),
         "volume": random.randint(100000, 5000000),
-        "currency": "TRY",
         "source": "Demo Veri",
+        "timestamp": time.strftime("%H:%M:%S"),
         "info": "⚠️ Yahoo Finance bağlantısı kurulamadı"
     }
 
 @app.post("/api/chat")
 async def chat(request: dict):
-    """AI Asistanı"""
     if not GEMINI_API_KEY:
         return {"reply": "GEMINI_API_KEY ekleyin"}
     
@@ -203,27 +237,12 @@ async def chat(request: dict):
             data = response.json()
             
             if response.status_code == 200:
-                reply = data["candidates"][0]["content"]["parts"][0]["text"]
-                return {"reply": reply}
+                return {"reply": data["candidates"][0]["content"]["parts"][0]["text"]}
             return {"reply": f"API hatası: {response.status_code}"}
     except Exception as e:
         return {"reply": f"Hata: {str(e)}"}
 
-@app.get("/api/test")
-async def test():
-    """Test endpoint"""
-    return {
-        "status": "OK",
-        "time": time.strftime("%H:%M:%S"),
-        "stocks_count": len(BIST_STOCKS)
-    }
-
-# ============================================================
-# 🚀 UYGULAMA BAŞLATMA
-# ============================================================
-
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 BIST Screener başlatılıyor...")
-    print(f"📊 Toplam hisse: {len(BIST_STOCKS)}")
+    print("🚀 BIST Screener V2 başlatılıyor...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

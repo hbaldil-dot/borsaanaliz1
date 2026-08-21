@@ -83,6 +83,24 @@
             color: #856404;
         }
         
+        .live-badge {
+            background: #28a745;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            display: inline-block;
+        }
+        
+        .demo-badge {
+            background: #ffc107;
+            color: #856404;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            display: inline-block;
+        }
+        
         @media (max-width: 768px) {
             .grid { grid-template-columns: 1fr; }
         }
@@ -199,27 +217,41 @@
                 return;
             }
             
-// Başarılı - Veriyi göster
-info.innerHTML = `
-    <h4>${data.symbol}</h4>
-    <p style="font-size: 12px; color: #888;">${data.name || ''}</p>
-    <p class="price">${data.price} ₺</p>
-    <p class="${changeClass}">
-        ${changeSymbol} ${Math.abs(data.change)}%
-    </p>
-    <hr style="margin: 10px 0;">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
-        <p><strong>Günlük Yüksek:</strong> ${data.high || '-'} ₺</p>
-        <p><strong>Günlük Düşük:</strong> ${data.low || '-'} ₺</p>
-        <p><strong>Açılış:</strong> ${data.open || '-'} ₺</p>
-        <p><strong>Hacim:</strong> ${data.volume ? (data.volume / 1000).toFixed(1) + 'K' : '-'}</p>
-    </div>
-    <hr style="margin: 10px 0;">
-    <p style="font-size: 11px; color: ${data.source && data.source.includes('Finnhub') ? '#28a745' : '#888'}; margin: 0;">
-        📡 ${data.source || 'BIST'} | ${new Date().toLocaleTimeString()}
-    </p>
-    ${data.info ? `<p style="font-size: 11px; color: #999; margin: 5px 0 0;">${data.info}</p>` : ''}
-`;
+            // ✅ BAŞARILI - VERİYİ GÖSTER
+            
+            // 🟢 Değişim durumunu belirle
+            const isPositive = data.change >= 0;
+            const changeClass = isPositive ? 'positive' : 'negative';
+            const changeSymbol = isPositive ? '▲' : '▼';
+            
+            // 🏷️ Kaynak etiketi
+            const isLive = data.source && data.source.includes('Finnhub');
+            const badgeClass = isLive ? 'live-badge' : 'demo-badge';
+            const badgeText = isLive ? '🟢 Canlı' : '🟡 Demo';
+            
+            info.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; color: #007bff;">${data.symbol}</h4>
+                    <span class="${badgeClass}">${badgeText}</span>
+                </div>
+                <p style="font-size: 12px; color: #888; margin: 2px 0 8px;">${data.name || ''}</p>
+                <p class="price">${data.price} ₺</p>
+                <p class="${changeClass}">
+                    ${changeSymbol} ${Math.abs(data.change)}%
+                </p>
+                <hr style="margin: 10px 0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
+                    <p><strong>Günlük Yüksek:</strong> ${data.high || '-'} ₺</p>
+                    <p><strong>Günlük Düşük:</strong> ${data.low || '-'} ₺</p>
+                    <p><strong>Açılış:</strong> ${data.open || '-'} ₺</p>
+                    <p><strong>Hacim:</strong> ${data.volume ? (data.volume / 1000).toFixed(1) + 'K' : '-'}</p>
+                </div>
+                <hr style="margin: 10px 0;">
+                <p style="font-size: 11px; color: ${isLive ? '#28a745' : '#888'}; margin: 0;">
+                    📡 ${data.source || 'BIST'} | ${new Date().toLocaleTimeString()}
+                </p>
+                ${data.info ? `<p style="font-size: 11px; color: #999; margin: 5px 0 0;">${data.info}</p>` : ''}
+            `;
             
             console.log(`✅ ${symbol} başarıyla gösterildi`);
             

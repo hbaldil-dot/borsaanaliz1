@@ -10,10 +10,6 @@ app = FastAPI()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGO_URI = os.getenv("MONGO_URI")
 
-# MongoDB Bağlantısı
-mongo_client = AsyncIOMotorClient(MONGO_URI) if MONGO_URI else None
-db = mongo_client["ai_app_db"] if mongo_client else None
-
 class ChatRequest(BaseModel):
     user_id: str
     message: str
@@ -23,14 +19,9 @@ async def chat(request: ChatRequest):
     if not GEMINI_API_KEY:
         return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!"}
 
-    # Güncel Gemini 3.6 REST API Endpoint Adresi
+    # Gemini REST API Çağrısı
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": request.message}]
-        }]
-    }
+    payload = {"contents": [{"parts": [{"text": request.message}]}]}
 
     async with httpx.AsyncClient() as client:
         try:
@@ -43,22 +34,29 @@ async def chat(request: ChatRequest):
 
             ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
 
-            # Mesajı MongoDB Atlas'a Kaydetme
-            if db is not None:
+            # MongoDB Kaydı ve Hata Denetimi
+            db_status = ""
+            if MONGO_URI:
                 try:
-                    await db.chat_history.insert_one({
+                    # Bağlantıyı isteğe özel anlık başlatıp zorlayarak yazıyoruz
+                    mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+                    db = mongo_client["ai_app_db"]
+                    
+                    await db["chat_history"].insert_one({
                         "user_id": request.user_id,
                         "user_message": request.message,
                         "bot_response": ai_reply
                     })
+                    mongo_client.close()
                 except Exception as db_err:
-                    # Veritabanı hatasını doğrudan ekrana yazdırıyoruz
-                    return {"reply": f"{ai_reply}\n\n[DB Kayıt Hatası: {str(db_err)}]"}
+                    db_status = f"\n\n[Veritabanı Kayıt Hatası: {str(db_err)}]"
+            else:
+                db_status = "\n\n[Veritabanı Uyarısı: MONGO_URI bulunamadı]"
 
-            return {"reply": ai_reply}
+            return {"reply": ai_reply + db_status}
 
         except Exception as e:
-            return {"reply": f"Sunucu Baglanti Hatasi: {str(e)}"}
+            return {"reply": f"Sunucu Bağlantı Hatası: {str(e)}"}
 
 @app.get("/")
 async def read_index():

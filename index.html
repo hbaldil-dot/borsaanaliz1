@@ -9,15 +9,18 @@
         body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         .main-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; height: 85vh; }
         
-        /* Sol Panel */
-        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; position: relative; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; position: relative; }
         label { font-weight: bold; font-size: 14px; color: #333; }
-        input[type="text"], select { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; text-transform: uppercase; }
         
+        /* Aranabilir Dropdown Kutusu */
+        .search-select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; text-transform: uppercase; cursor: pointer; }
+        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 220px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 0 0 5px 5px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .dropdown-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .dropdown-item:hover { background-color: #007bff; color: white; }
+
         .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; overflow-y: auto; margin-top: 10px; }
         
-        /* Sağ Panel */
         .chat-container { flex: 2; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
         .chat-box { flex: 1; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
         .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 5px; max-width: 80%; }
@@ -31,32 +34,21 @@
 <body>
 
 <div class="main-container">
-    <!-- SOL TARAF: Borsa Hisseleri & Arama/Seçim -->
     <div class="sidebar">
         <h3>BIST Hisse Sorgula</h3>
         
-        <!-- Otomatik Tamamlamalı Arama Kutusu -->
         <div class="form-group">
-            <label for="stockSearch">Arayarak Tamamla:</label>
-            <input type="text" id="stockSearch" list="stockOptions" placeholder="Hisse Yazın (Örn: THY...)" oninput="handleSearchInput(this.value)">
-            <datalist id="stockOptions"></datalist>
-        </div>
-
-        <!-- Roll-Down Açılır Liste -->
-        <div class="form-group">
-            <label for="stockSelect">Tüm Hisse Listesi (Açılır Menü):</label>
-            <select id="stockSelect" onchange="fetchStock(this.value)">
-                <option value="">-- Hisse Seçiniz --</option>
-            </select>
+            <label for="stockInput">Günün Hisse Listesi (Arayın veya Seçin):</label>
+            <input type="text" id="stockInput" class="search-select" placeholder="Yükleniyor..." oninput="filterStocks()" onclick="showDropdown()" autocomplete="off">
+            <div id="dropdownMenu" class="dropdown-menu"></div>
         </div>
 
         <div class="stock-card" id="stockCard">
             <h4>Hisse Seçin</h4>
-            <p>Son 3 yıla ait kâr durumu ve anlık fiyat için listeden seçim yapabilir veya arayabilirsiniz.</p>
+            <p>Roll-down listeden bir hisse seçtiğinizde 15 dk gecikmeli veriler çekilecektir.</p>
         </div>
     </div>
 
-    <!-- SAĞ TARAF: Yapay Zeka Sohbeti -->
     <div class="chat-container">
         <h3>Yapay Zeka Asistanı</h3>
         <div class="chat-box" id="chatBox"></div>
@@ -70,46 +62,70 @@
 <script>
     let globalStockList = [];
 
-    // Sayfa açıldığında günlük hisse listesini 1 defa çeker
+    // Sayfa açıldığında sunucunun günde 1 kez güncellediği dinamik listeyi çeker
     window.onload = async function() {
         try {
             const res = await fetch('/api/stocks/list');
             const data = await res.json();
             globalStockList = data.stocks || [];
-
-            const selectEl = document.getElementById("stockSelect");
-            const datalistEl = document.getElementById("stockOptions");
-
-            globalStockList.forEach(symbol => {
-                // Dropdown Doldurma
-                const optSelect = document.createElement("option");
-                optSelect.value = symbol;
-                optSelect.textContent = symbol;
-                selectEl.appendChild(optSelect);
-
-                // Autocomplete (Datalist) Doldurma
-                const optData = document.createElement("option");
-                optData.value = symbol;
-                datalistEl.appendChild(optData);
-            });
+            
+            document.getElementById("stockInput").placeholder = "Hisse Ara veya Aşağı Doğru Aç...";
+            renderDropdown(globalStockList);
         } catch (err) {
             console.error("Hisse listesi alınamadı:", err);
+            document.getElementById("stockInput").placeholder = "Liste yüklenemedi";
         }
     };
 
-    function handleSearchInput(val) {
-        const cleanVal = val.trim().toUpperCase();
-        if (globalStockList.includes(cleanVal)) {
-            document.getElementById("stockSelect").value = cleanVal;
-            fetchStock(cleanVal);
+    function renderDropdown(list) {
+        const menu = document.getElementById("dropdownMenu");
+        menu.innerHTML = "";
+        
+        if (list.length === 0) {
+            menu.innerHTML = `<div class="dropdown-item">Sonuç bulunamadı</div>`;
+            return;
         }
+
+        list.forEach(symbol => {
+            const item = document.createElement("div");
+            item.className = "dropdown-item";
+            item.innerText = symbol;
+            
+            // Seçim yapılınca veri çekme işlemi tetiklenir
+            item.onclick = function() {
+                document.getElementById("stockInput").value = symbol;
+                menu.style.display = "none";
+                fetchStock(symbol);
+            };
+            menu.appendChild(item);
+        });
     }
+
+    function showDropdown() {
+        document.getElementById("dropdownMenu").style.display = "block";
+    }
+
+    function filterStocks() {
+        const query = document.getElementById("stockInput").value.trim().toUpperCase();
+        const filtered = globalStockList.filter(s => s.includes(query));
+        renderDropdown(filtered);
+        document.getElementById("dropdownMenu").style.display = "block";
+    }
+
+    // Dışarı tıklanınca açılır menüyü kapatır
+    document.addEventListener("click", function(e) {
+        const input = document.getElementById("stockInput");
+        const menu = document.getElementById("dropdownMenu");
+        if (!input.contains(e.target) && !menu.contains(e.target)) {
+            menu.style.display = "none";
+        }
+    });
 
     async function fetchStock(symbol) {
         if (!symbol) return;
         
         const card = document.getElementById("stockCard");
-        card.innerHTML = `<p><strong>${symbol}</strong> verileri yükleniyor...</p>`;
+        card.innerHTML = `<p><strong>${symbol}</strong> verileri çekiliyor (15 dk gecikmeli)...</p>`;
 
         try {
             const res = await fetch(`/api/stock/${symbol}`);
@@ -121,7 +137,7 @@
             }
 
             let profitHTML = "<ul>";
-            if (typeof data.profits === 'object') {
+            if (typeof data.profits === 'object' && Object.keys(data.profits).length > 0) {
                 for (const [year, netProfit] of Object.entries(data.profits)) {
                     profitHTML += `<li><strong>${year}:</strong> ${netProfit}</li>`;
                 }

@@ -199,30 +199,27 @@
                 return;
             }
             
-            // ✅ BAŞARILI - VERİYİ GÖSTER
-            const changeClass = data.change >= 0 ? 'positive' : 'negative';
-            const changeSymbol = data.change >= 0 ? '▲' : '▼';
-            
-            info.innerHTML = `
-                <h4>${data.symbol}</h4>
-                <p style="font-size: 12px; color: #888;">${data.name || ''}</p>
-                <p class="price">${data.price} ₺</p>
-                <p class="${changeClass}">
-                    ${changeSymbol} ${Math.abs(data.change)}%
-                </p>
-                <hr style="margin: 10px 0;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
-                    <p><strong>Günlük Yüksek:</strong> ${data.high || '-'} ₺</p>
-                    <p><strong>Günlük Düşük:</strong> ${data.low || '-'} ₺</p>
-                    <p><strong>Açılış:</strong> ${data.open || '-'} ₺</p>
-                    <p><strong>Hacim:</strong> ${data.volume ? (data.volume / 1000).toFixed(1) + 'K' : '-'}</p>
-                </div>
-                <hr style="margin: 10px 0;">
-                <p style="font-size: 11px; color: #888; margin: 0;">
-                    Kaynak: ${data.source || 'BIST'} | ${new Date().toLocaleTimeString()}
-                </p>
-                ${data.info ? `<p style="font-size: 11px; color: #999; margin: 5px 0 0;">${data.info}</p>` : ''}
-            `;
+// Başarılı - Veriyi göster
+info.innerHTML = `
+    <h4>${data.symbol}</h4>
+    <p style="font-size: 12px; color: #888;">${data.name || ''}</p>
+    <p class="price">${data.price} ₺</p>
+    <p class="${changeClass}">
+        ${changeSymbol} ${Math.abs(data.change)}%
+    </p>
+    <hr style="margin: 10px 0;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
+        <p><strong>Günlük Yüksek:</strong> ${data.high || '-'} ₺</p>
+        <p><strong>Günlük Düşük:</strong> ${data.low || '-'} ₺</p>
+        <p><strong>Açılış:</strong> ${data.open || '-'} ₺</p>
+        <p><strong>Hacim:</strong> ${data.volume ? (data.volume / 1000).toFixed(1) + 'K' : '-'}</p>
+    </div>
+    <hr style="margin: 10px 0;">
+    <p style="font-size: 11px; color: ${data.source && data.source.includes('Finnhub') ? '#28a745' : '#888'}; margin: 0;">
+        📡 ${data.source || 'BIST'} | ${new Date().toLocaleTimeString()}
+    </p>
+    ${data.info ? `<p style="font-size: 11px; color: #999; margin: 5px 0 0;">${data.info}</p>` : ''}
+`;
             
             console.log(`✅ ${symbol} başarıyla gösterildi`);
             

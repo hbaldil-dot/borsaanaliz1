@@ -1,17 +1,13 @@
 """
-BIST Screener - Cache ve Rate Limit Korumalı
+BIST Screener - Alternatif Veri Kaynağı ile
 """
 
 import os
-import time
-import asyncio
 import httpx
-import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,106 +25,126 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ============================================================
-# 📦 ÖNBELKEK (CACHE) SİSTEMİ
+# 📊 BIST HİSSE LİSTESİ (Gerçek kodlar)
 # ============================================================
 
-class StockCache:
-    def __init__(self):
-        self.data = {}
-        self.timestamps = {}
-        self.ttl = 300  # 5 dakika
-    
-    def get(self, symbol):
-        """Önbellekten veri al"""
-        if symbol in self.data:
-            if datetime.now() - self.timestamps[symbol] < timedelta(seconds=self.ttl):
-                return self.data[symbol]
+BIST_STOCKS = {
+    "THYAO": "Türk Hava Yolları",
+    "ASELS": "Aselsan",
+    "KCHOL": "Koç Holding",
+    "SAHOL": "Sabancı Holding",
+    "AKBNK": "Akbank",
+    "GARAN": "Garanti BBVA",
+    "ISCTR": "İş Bankası",
+    "YKBNK": "Yapı Kredi",
+    "TCELL": "Turkcell",
+    "TTKOM": "Türk Telekom",
+    "BIMAS": "BİM",
+    "MGROS": "Migros",
+    "EREGL": "Ereğli Demir Çelik",
+    "FROTO": "Ford Otosan",
+    "TOASO": "Tofaş",
+    "TUPRS": "Tüpraş",
+    "PETKM": "Petkim",
+    "SISE": "Şişe Cam",
+    "VESTL": "Vestel",
+    "ARCLK": "Arçelik",
+    "ENJSA": "Enerjisa",
+    "PGSUS": "Pegasus",
+    "TAVHL": "TAV Havalimanları",
+    "DOAS": "Doğuş Otomotiv",
+    "MAVI": "Mavi Giyim",
+    "SASA": "Sasa Polyester",
+    "CCOLA": "Coca-Cola İçecek",
+    "AEFES": "Anadolu Efes",
+    "ODAS": "Odaş Elektrik",
+    "OYAKC": "Oyak Çimento",
+}
+
+# ============================================================
+# 🌐 ALTERNATİF VERİ KAYNAĞI (Alpha Vantage / Finnhub / vb.)
+# ============================================================
+
+# NOT: Bu örnekte Finnhub API kullanıyoruz (ücretsiz)
+# https://finnhub.io/register - buradan ücretsiz API anahtarı al
+
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "dummy_key")
+
+async def get_stock_data_finnhub(symbol: str):
+    """Finnhub API ile hisse verisi çek"""
+    if not FINNHUB_API_KEY or FINNHUB_API_KEY == "dummy_key":
         return None
     
-    def set(self, symbol, data):
-        """Önbelleğe veri ekle"""
-        self.data[symbol] = data
-        self.timestamps[symbol] = datetime.now()
-    
-    def clear(self):
-        """Önbelleği temizle"""
-        self.data.clear()
-        self.timestamps.clear()
-
-stock_cache = StockCache()
-
-# ============================================================
-# 📊 BIST HİSSE LİSTESİ
-# ============================================================
-
-BIST_STOCKS = [
-    "AEFES", "AKBNK", "AKSA", "ALARK", "ARCLK", "ASELS", "BIMAS", "BRSAN",
-    "CCOLA", "DOAS", "DOHOL", "ECILC", "ENJSA", "ENKAI", "EREGL", "FROTO",
-    "GARAN", "GUBRF", "HALKB", "ISCTR", "KCHOL", "KRDMD", "MAVI",
-    "MGROS", "MPARK", "ODAS", "OTKAR", "OYAKC", "PETKM", "PGSUS", "SAHOL",
-    "SASA", "SISE", "TAVHL", "TCELL", "THYAO", "TKFEN", "TOASO", "TSKB",
-    "TTKOM", "TTRAK", "TUPRS", "VAKBN", "VESTL", "YKBNK"
-]
-
-# ============================================================
-# 🔧 YARDIMCI FONKSİYONLAR (Rate Limit Korumalı)
-# ============================================================
-
-def safe_get_stock(symbol):
-    """Rate limit hatasını yakala ve yeniden dene"""
-    max_retries = 2
-    for attempt in range(max_retries):
-        try:
-            ticker = yf.Ticker(f"{symbol}.IS")
+    try:
+        # Finnhub BIST hisseleri için "IS" eklenmesi gerekiyor
+        finnhub_symbol = f"{symbol}.IS"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1. Güncel fiyat
+            quote_url = f"https://finnhub.io/api/v1/quote?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
+            quote_res = await client.get(quote_url)
+            quote_data = quote_res.json()
             
-            # Sadece info'yu al (history'den önce)
-            info = ticker.info
-            
-            if not info or 'symbol' not in info:
+            if quote_res.status_code != 200:
                 return None
             
-            # Tarihsel veriyi al (2 gün)
-            hist = ticker.history(period="2d")
+            # 2. Şirket bilgileri
+            profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
+            profile_res = await client.get(profile_url)
+            profile_data = profile_res.json() if profile_res.status_code == 200 else {}
             
-            if hist.empty:
-                # Sadece info'dan fiyat al
-                current_price = info.get('regularMarketPrice', info.get('currentPrice', 0))
-                if current_price == 0:
-                    return None
-                
-                return {
-                    "symbol": symbol.upper(),
-                    "price": round(current_price, 2),
-                    "change": 0,
-                    "volume": info.get('volume', 0),
-                    "market_cap": info.get('marketCap', 0),
-                    "pe_ratio": info.get('trailingPE', 0),
-                    "dividend_yield": info.get('dividendYield', 0)
-                }
-            
-            current_price = hist['Close'].iloc[-1]
-            prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
-            change = ((current_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
-            
+            # Veriyi düzenle
             return {
-                "symbol": symbol.upper(),
-                "price": round(current_price, 2),
-                "change": round(change, 2),
-                "volume": int(hist['Volume'].iloc[-1]),
-                "market_cap": info.get('marketCap', 0),
-                "pe_ratio": info.get('trailingPE', 0),
-                "dividend_yield": info.get('dividendYield', 0)
+                "symbol": symbol,
+                "name": profile_data.get("name", BIST_STOCKS.get(symbol, symbol)),
+                "price": quote_data.get("c", 0),  # Current price
+                "change": quote_data.get("dp", 0),  # Percent change
+                "high": quote_data.get("h", 0),  # Day high
+                "low": quote_data.get("l", 0),  # Day low
+                "open": quote_data.get("o", 0),  # Open price
+                "volume": quote_data.get("v", 0),  # Volume
+                "market_cap": profile_data.get("marketCapitalization", 0),
+                "currency": "TRY",
+                "source": "Finnhub"
             }
-            
-        except Exception as e:
-            error_msg = str(e)
-            if "Too Many Requests" in error_msg:
-                print(f"⚠️ Rate limit için {symbol} bekleniyor...")
-                time.sleep(2)  # 2 saniye bekle
-                continue
-            return None
+    except Exception as e:
+        print(f"Finnhub hatası ({symbol}): {e}")
+        return None
+
+async def get_stock_data_alphavantage(symbol: str):
+    """Alpha Vantage API ile hisse verisi çek (alternatif)"""
+    # Alpha Vantage için ücretsiz API anahtarı alınabilir
+    # https://www.alphavantage.co/support/#api-key
+    ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
     
-    return None
+    if not ALPHA_VANTAGE_KEY:
+        return None
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}.IS&apikey={ALPHA_VANTAGE_KEY}"
+            res = await client.get(url)
+            data = res.json()
+            
+            if "Global Quote" not in data:
+                return None
+            
+            quote = data["Global Quote"]
+            return {
+                "symbol": symbol,
+                "name": BIST_STOCKS.get(symbol, symbol),
+                "price": float(quote.get("05. price", 0)),
+                "change": float(quote.get("10. change percent", "0%").replace("%", "")),
+                "high": float(quote.get("03. high", 0)),
+                "low": float(quote.get("04. low", 0)),
+                "open": float(quote.get("02. open", 0)),
+                "volume": int(quote.get("06. volume", 0)),
+                "currency": "TRY",
+                "source": "Alpha Vantage"
+            }
+    except Exception as e:
+        print(f"Alpha Vantage hatası ({symbol}): {e}")
+        return None
 
 # ============================================================
 # 🌐 API ENDPOINTLERİ
@@ -140,61 +156,67 @@ async def home():
 
 @app.get("/api/stocks")
 async def get_stocks():
-    return {"stocks": BIST_STOCKS}
+    """Tüm BIST hisselerini listele"""
+    return {"stocks": list(BIST_STOCKS.keys())}
 
 @app.get("/api/stock/{symbol}")
 async def get_stock(symbol: str):
-    """Hisse detayını getir (önbellekli)"""
+    """Hisse detayını getir - Finnhub veya Alpha Vantage ile"""
     
-    # Önbellekten kontrol et
-    cached = stock_cache.get(symbol)
-    if cached:
-        return cached
+    symbol = symbol.upper()
     
-    # Veriyi çek
-    result = safe_get_stock(symbol)
+    if symbol not in BIST_STOCKS:
+        return {"error": f"{symbol} BIST listesinde bulunamadı"}
     
-    if result is None:
-        return {"error": f"{symbol} için veri alınamıyor. Lütfen daha sonra tekrar deneyin."}
+    # 1. Finnhub dene
+    data = await get_stock_data_finnhub(symbol)
     
-    # Önbelleğe ekle
-    stock_cache.set(symbol, result)
+    # 2. Finnhub olmazsa Alpha Vantage dene
+    if data is None:
+        data = await get_stock_data_alphavantage(symbol)
     
-    return result
+    # 3. Hiçbiri çalışmazsa örnek veri döndür (gösterim için)
+    if data is None or data.get("price", 0) == 0:
+        # Hata mesajı
+        return {
+            "error": f"{symbol} için veri alınamıyor.",
+            "message": "Lütfen daha sonra tekrar deneyin.",
+            "hint": "Finnhub ücretsiz API anahtarı almak için: https://finnhub.io/register"
+        }
+    
+    return data
 
-@app.get("/api/stocks/all")
-async def get_all_stocks():
-    """Tüm hisselerin verilerini getir (toplu)"""
-    results = {}
-    errors = []
+@app.get("/api/stock/{symbol}/history")
+async def get_stock_history(symbol: str):
+    """Hisse geçmiş verileri (sadece Finnhub ile)"""
+    if not FINNHUB_API_KEY or FINNHUB_API_KEY == "dummy_key":
+        return {"error": "Finnhub API anahtarı gerekli"}
     
-    for symbol in BIST_STOCKS[:10]:  # 10 hisse ile sınırlı, çok fazla istek atmamak için
-        # Önbellekten kontrol et
-        cached = stock_cache.get(symbol)
-        if cached:
-            results[symbol] = cached
-            continue
-        
-        # Veriyi çek
-        result = safe_get_stock(symbol)
-        if result:
-            stock_cache.set(symbol, result)
-            results[symbol] = result
-        else:
-            errors.append(symbol)
-        
-        # Rate limit koruması
-        await asyncio.sleep(0.5)
-    
-    return {
-        "success": results,
-        "errors": errors,
-        "total": len(results)
-    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Son 6 aylık veri
+            url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}.IS&resolution=D&count=180&token={FINNHUB_API_KEY}"
+            res = await client.get(url)
+            data = res.json()
+            
+            if "c" not in data or data.get("s") != "ok":
+                return {"error": "Geçmiş veri alınamadı"}
+            
+            # Finnhub'dan gelen veriyi düzenle
+            dates = [datetime.fromtimestamp(t).strftime("%Y-%m-%d") for t in data["t"]]
+            
+            return {
+                "symbol": symbol,
+                "dates": dates,
+                "prices": data["c"],
+                "volumes": data.get("v", [])
+            }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/api/chat")
 async def chat(request: dict):
-    """AI Asistanı"""
+    """AI Asistanı (Gemini)"""
     if not GEMINI_API_KEY:
         return {"reply": "API anahtarı eksik"}
     

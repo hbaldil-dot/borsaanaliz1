@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: borsaanaliz1
+    runtime: python
+    repo: https://github.com/hbaldil-dot/borsaanaliz1
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+    pythonVersion: 3.11.9

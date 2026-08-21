@@ -1,5 +1,4 @@
 import os
-import re
 import httpx
 import yfinance as yf
 from fastapi import FastAPI
@@ -16,26 +15,22 @@ class ChatRequest(BaseModel):
     user_id: str
     message: str
 
-# Sadece hisse kartı için veri çeken uç nokta (Gemini çalıştırmaz)
 @app.get("/api/stock/{symbol}")
 async def get_stock_info(symbol: str):
     try:
         ticker_symbol = f"{symbol.upper()}.IS" if not symbol.endswith(".IS") else symbol.upper()
         ticker = yf.Ticker(ticker_symbol)
         
-        # Anlık Fiyat Verileri
         history = ticker.history(period="1d")
         if history.empty:
             return {"error": "Hisse verisi bulunamadı."}
         
         current_price = history['Close'].iloc[-1]
         
-        # Bilanço / Kâr Durumu Verileri
         financials = ticker.financials
         profit_data = {}
         
         if financials is not None and not financials.empty:
-            # Net Income (Net Kâr) kalemi varsa son 3 yılı al
             if 'Net Income' in financials.index:
                 net_incomes = financials.loc['Net Income']
                 for date, val in net_incomes.items():
@@ -75,40 +70,6 @@ async def chat(request: ChatRequest):
                 try:
                     mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
                     db = mongo_client["borsaanaliz1_db"]
-                    await db["chat_history"].insert_one({
-                        "user_id": request.user_id,
-                        "user_message": request.message,
-                        "bot_response": ai_reply
-                    })
-                    mongo_client.close()
-                except Exception as db_err:
-                    print(f"DB Kayıt Hatası: {db_err}")
-
-            return {"reply": ai_reply, "retry_after": 0}
-
-        except Exception as e:
-            return {"reply": f"Sunucu Bağlantı Hatası: {str(e)}", "retry_after": 0}
-
-@app.get("/")
-async def read_index():
-    return FileResponse("index.html")                
-                return {
-                    "reply": "Ücretsiz kullanım kotasına ulaşıldı. Lütfen geri sayımın bitmesini bekleyin.",
-                    "retry_after": wait_seconds
-                }
-
-            if response.status_code != 200:
-                error_msg = data.get("error", {}).get("message", "API hatası")
-                return {"reply": f"Gemini API Hatası ({response.status_code}): {error_msg}", "retry_after": 0}
-
-            ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
-
-            # MongoDB Kaydı
-            if MONGO_URI:
-                try:
-                    mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-                    db = mongo_client["borsaanaliz1_db"]
-                    
                     await db["chat_history"].insert_one({
                         "user_id": request.user_id,
                         "user_message": request.message,

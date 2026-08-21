@@ -40,7 +40,7 @@ async def chat(request: ChatRequest):
                 try:
                     # Bağlantıyı isteğe özel anlık başlatıp zorlayarak yazıyoruz
                     mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-                    db = mongo_client["ai_app_db"]
+                    db = mongo_client["borsaanaliz1_db"]
                     
                     await db["chat_history"].insert_one({
                         "user_id": request.user_id,

@@ -52,7 +52,8 @@ async def chat(request: ChatRequest):
                         "bot_response": ai_reply
                     })
                 except Exception as db_err:
-                    print(f"MongoDB Kayıt Hatası: {db_err}")
+                    # Veritabanı hatasını doğrudan ekrana yazdırıyoruz
+                    return {"reply": f"{ai_reply}\n\n[DB Kayıt Hatası: {str(db_err)}]"}
 
             return {"reply": ai_reply}
 

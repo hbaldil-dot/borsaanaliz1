@@ -1,3 +1,4 @@
+# Python 3.11 kullan
 FROM python:3.11-slim
 
 WORKDIR /app

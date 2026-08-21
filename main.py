@@ -1,10 +1,11 @@
 """
-BIST Screener - Yahoo Finance ile Kesin Çözüm
+BIST Screener - Yahoo Finance ile Cache + Rate Limit Korumalı
 """
 
 import os
 import time
 import random
+from datetime import datetime, timedelta
 import yfinance as yf
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -26,7 +27,36 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ============================================================
-# 📊 TÜM BIST HİSSELERİ (GÜNCEL)
+# 📦 ÖNBELKEK (CACHE) SİSTEMİ
+# ============================================================
+
+class StockCache:
+    def __init__(self):
+        self.data = {}
+        self.timestamps = {}
+        self.ttl = 300  # 5 dakika
+    
+    def get(self, symbol):
+        """Önbellekten veri al"""
+        if symbol in self.data:
+            if datetime.now() - self.timestamps[symbol] < timedelta(seconds=self.ttl):
+                return self.data[symbol]
+        return None
+    
+    def set(self, symbol, data):
+        """Önbelleğe veri ekle"""
+        self.data[symbol] = data
+        self.timestamps[symbol] = datetime.now()
+    
+    def clear(self):
+        """Önbelleği temizle"""
+        self.data.clear()
+        self.timestamps.clear()
+
+stock_cache = StockCache()
+
+# ============================================================
+# 📊 BIST HİSSELERİ
 # ============================================================
 
 BIST_STOCKS = {
@@ -69,41 +99,60 @@ BIST_STOCKS = {
 }
 
 # ============================================================
-# 📈 YAHOO FINANCE VERİ ÇEKME (GELİŞTİRİLMİŞ)
+# 📈 YAHOO FINANCE VERİ ÇEKME (RATE LIMIT KORUMALI)
 # ============================================================
+
+# Son istek zamanını takip et
+last_request_time = 0
+min_request_interval = 2  # Her istek arasında 2 saniye bekle
 
 def get_stock_data(symbol: str):
     """
-    Yahoo Finance ile hisse verisi çek - Geliştirilmiş versiyon
+    Yahoo Finance ile hisse verisi çek - Rate limit korumalı
     """
+    global last_request_time
+    
+    # 1️⃣ Önbellekten kontrol et
+    cached = stock_cache.get(symbol)
+    if cached:
+        print(f"📦 {symbol} önbellekten geldi")
+        return cached
+    
+    # 2️⃣ Rate limit koruması
+    current_time = time.time()
+    time_since_last = current_time - last_request_time
+    if time_since_last < min_request_interval:
+        wait_time = min_request_interval - time_since_last
+        print(f"⏳ Rate limit için {wait_time:.1f} saniye bekleniyor...")
+        time.sleep(wait_time)
+    
     try:
-        # 1. Ticker oluştur
+        last_request_time = time.time()
+        
         ticker = yf.Ticker(f"{symbol}.IS")
         
-        # 2. Info al
+        # Info al (tek istek)
         info = ticker.info
         
-        # Info kontrolü
         if not info or 'regularMarketPrice' not in info:
-            print(f"⚠️ {symbol} info gelmedi, alternatif deneniyor...")
-            # Alternatif: history ile dene
+            # History ile dene
             hist = ticker.history(period="2d")
             if hist.empty:
                 return None
+            
             current_price = hist['Close'].iloc[-1]
             open_price = hist['Open'].iloc[-1]
             high_price = hist['High'].iloc[-1]
             low_price = hist['Low'].iloc[-1]
             volume = hist['Volume'].iloc[-1] if 'Volume' in hist else 0
             
-            # Değişim
             if len(hist) > 1:
                 prev_close = hist['Close'].iloc[-2]
                 change = ((current_price - prev_close) / prev_close) * 100
             else:
                 change = 0
             
-            return {
+            data = {
                 "symbol": symbol,
                 "name": BIST_STOCKS.get(symbol, symbol),
                 "price": round(float(current_price), 2),
@@ -112,12 +161,15 @@ def get_stock_data(symbol: str):
                 "low": round(float(low_price), 2),
                 "open": round(float(open_price), 2),
                 "volume": int(volume),
-                "market_cap": 0,
-                "source": "Yahoo Finance (History)",
+                "source": "Yahoo Finance",
                 "timestamp": time.strftime("%H:%M:%S")
             }
+            
+            # Önbelleğe ekle
+            stock_cache.set(symbol, data)
+            return data
         
-        # 3. Info'dan verileri al
+        # Info'dan veri al
         current_price = info.get('regularMarketPrice', 0)
         if current_price == 0:
             current_price = info.get('currentPrice', 0)
@@ -125,15 +177,13 @@ def get_stock_data(symbol: str):
         if current_price == 0:
             return None
         
-        # Değişim
         change = info.get('regularMarketChangePercent', 0)
         if change == 0:
             change = info.get('changePercent', 0)
         
-        # Şirket adı
         name = info.get('longName', info.get('shortName', BIST_STOCKS.get(symbol, symbol)))
         
-        return {
+        data = {
             "symbol": symbol,
             "name": name,
             "price": round(float(current_price), 2),
@@ -142,38 +192,50 @@ def get_stock_data(symbol: str):
             "low": round(float(info.get('regularMarketDayLow', info.get('dayLow', current_price))), 2),
             "open": round(float(info.get('regularMarketOpen', info.get('open', current_price))), 2),
             "volume": int(info.get('regularMarketVolume', info.get('volume', 0))),
-            "market_cap": info.get('marketCap', 0),
-            "source": "Yahoo Finance (Info)",
+            "source": "Yahoo Finance",
             "timestamp": time.strftime("%H:%M:%S")
         }
         
+        # Önbelleğe ekle
+        stock_cache.set(symbol, data)
+        print(f"✅ {symbol}: {data['price']} ₺ (kaydedildi)")
+        return data
+        
     except Exception as e:
-        print(f"❌ {symbol} hatası: {str(e)[:100]}")
+        error_msg = str(e)
+        if "429" in error_msg or "Too Many Requests" in error_msg:
+            print(f"⚠️ Rate limit aşıldı ({symbol}), 5 saniye bekleniyor...")
+            time.sleep(5)
+            return None
+        print(f"❌ {symbol} hatası: {error_msg[:100]}")
         return None
 
 # ============================================================
-# 🧪 TEST FONKSİYONU
+# 🧪 TEST ENDPOINT
 # ============================================================
 
 @app.get("/api/test/{symbol}")
 async def test_stock(symbol: str):
-    """Test endpoint - detaylı hata ayıklama için"""
+    """Test endpoint"""
     symbol = symbol.upper()
     try:
         ticker = yf.Ticker(f"{symbol}.IS")
         info = ticker.info
-        hist = ticker.history(period="2d")
         
         return {
             "symbol": symbol,
-            "info_keys": list(info.keys())[:20] if info else [],
-            "history_empty": hist.empty,
-            "history_length": len(hist),
-            "current_price": info.get('regularMarketPrice', 'yok'),
-            "info_exists": bool(info)
+            "price": info.get('regularMarketPrice', 'yok'),
+            "info_keys": list(info.keys())[:10] if info else [],
+            "has_data": bool(info and info.get('regularMarketPrice'))
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/cache/clear")
+async def clear_cache():
+    """Önbelleği temizle"""
+    stock_cache.clear()
+    return {"status": "Cache cleared"}
 
 # ============================================================
 # 🌐 API ENDPOINTLERİ
@@ -194,17 +256,13 @@ async def get_stock(symbol: str):
     if symbol not in BIST_STOCKS:
         return {"error": f"{symbol} bulunamadı"}
     
-    print(f"🔍 {symbol} sorgulanıyor...")
-    
-    # Veriyi çek
+    # Veriyi çek (önbellekli)
     data = get_stock_data(symbol)
     
     if data:
-        print(f"✅ {symbol}: {data['price']} ₺ ({data['change']}%)")
         return data
     
     # Veri gelmezse demo
-    print(f"⚠️ {symbol} için demo veri")
     price = round(random.uniform(50, 500), 2)
     change = round(random.uniform(-5, 5), 2)
     
@@ -219,7 +277,7 @@ async def get_stock(symbol: str):
         "volume": random.randint(100000, 5000000),
         "source": "Demo Veri",
         "timestamp": time.strftime("%H:%M:%S"),
-        "info": "⚠️ Yahoo Finance bağlantısı kurulamadı"
+        "info": "⚠️ Yahoo Finance rate limit aşıldı, demo veri gösteriliyor"
     }
 
 @app.post("/api/chat")

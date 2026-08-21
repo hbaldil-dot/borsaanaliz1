@@ -18,26 +18,70 @@
         .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
         .card h3 { margin-top: 0; color: #1a1a2e; }
         
-        select, input, button { padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; width: 100%; margin: 5px 0; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        select, input, button { 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 14px; 
+            width: 100%; 
+            margin: 5px 0; 
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
         button:hover { background: #0056b3; }
         
-        .stock-info { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 10px; }
+        .stock-info { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-top: 10px; 
+            min-height: 100px;
+        }
         .stock-info h4 { margin: 0; color: #007bff; }
         .stock-info p { margin: 5px 0; }
+        .stock-info .price { font-size: 24px; font-weight: bold; }
+        .stock-info .positive { color: green; }
+        .stock-info .negative { color: red; }
         
-        #chatBox { height: 300px; overflow-y: auto; border: 2px solid #f0f0f0; border-radius: 8px; padding: 10px; margin: 10px 0; }
-        .msg-user { background: #007bff; color: white; padding: 8px 12px; border-radius: 10px; margin: 5px 0; text-align: right; }
-        .msg-bot { background: #f1f3f5; padding: 8px 12px; border-radius: 10px; margin: 5px 0; }
+        #chatBox { 
+            height: 300px; 
+            overflow-y: auto; 
+            border: 2px solid #f0f0f0; 
+            border-radius: 8px; 
+            padding: 10px; 
+            margin: 10px 0; 
+        }
+        .msg-user { 
+            background: #007bff; 
+            color: white; 
+            padding: 8px 12px; 
+            border-radius: 10px; 
+            margin: 5px 0; 
+            text-align: right; 
+        }
+        .msg-bot { 
+            background: #f1f3f5; 
+            padding: 8px 12px; 
+            border-radius: 10px; 
+            margin: 5px 0; 
+        }
         
         .input-group { display: flex; gap: 10px; }
         .input-group input { flex: 1; }
         .input-group button { width: auto; padding: 10px 30px; }
         
-        .result-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        .result-table th { background: #f8f9fa; padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6; }
-        .result-table td { padding: 8px 10px; border-bottom: 1px solid #dee2e6; }
-        .result-table tr:hover { background: #f8f9fa; }
+        .error-box {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ffc107;
+            color: #856404;
+        }
         
         @media (max-width: 768px) {
             .grid { grid-template-columns: 1fr; }
@@ -87,18 +131,26 @@
     
     window.onload = async function() {
         try {
+            console.log('📊 Hisse listesi yükleniyor...');
             const res = await fetch('/api/stocks');
             const data = await res.json();
             
+            console.log('📊 Gelen veri:', data);
+            
             const select = document.getElementById('stockSelect');
-            data.stocks.forEach(symbol => {
-                const option = document.createElement('option');
-                option.value = symbol;
-                option.textContent = symbol;
-                select.appendChild(option);
-            });
+            if (data.stocks && data.stocks.length > 0) {
+                data.stocks.forEach(symbol => {
+                    const option = document.createElement('option');
+                    option.value = symbol;
+                    option.textContent = symbol;
+                    select.appendChild(option);
+                });
+                console.log('✅ Hisse listesi yüklendi:', data.stocks.length);
+            } else {
+                console.error('❌ Hisse listesi boş');
+            }
         } catch (err) {
-            console.error('Hisse listesi alınamadı:', err);
+            console.error('❌ Hisse listesi alınamadı:', err);
         }
     };
 
@@ -106,44 +158,87 @@
     // HİSSE DETAYI ÇEK
     // ============================================================
     
-async function fetchStock(symbol) {
-    if (!symbol) return;
-    
-    const info = document.getElementById('stockInfo');
-    info.innerHTML = `<p>⏳ ${symbol} yükleniyor...</p>`;
-    
-    try {
-        const res = await fetch(`/api/stock/${symbol}`);
-        const data = await res.json();
+    async function fetchStock(symbol) {
+        if (!symbol) return;
         
-        if (data.error) {
-            info.innerHTML = `
-                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffc107;">
-                    <p style="color: #856404; margin: 0;">
+        console.log(`🔍 ${symbol} yükleniyor...`);
+        
+        const info = document.getElementById('stockInfo');
+        info.innerHTML = `<p>⏳ <strong>${symbol}</strong> yükleniyor...</p>`;
+        
+        try {
+            const res = await fetch(`/api/stock/${symbol}`);
+            console.log(`📡 ${symbol} API yanıtı:`, res.status);
+            
+            const data = await res.json();
+            console.log(`📊 ${symbol} verisi:`, data);
+            
+            // HATA KONTROLÜ
+            if (data.error) {
+                info.innerHTML = `
+                    <div class="error-box">
                         <strong>⚠️ ${data.error}</strong>
-                    </p>
-                    <p style="color: #856404; margin: 5px 0 0; font-size: 13px;">
-                        ⏳ Lütfen 1-2 dakika bekleyip tekrar deneyin. 
-                        <br>Önbellek sistemi aktif: <strong>${new Date().toLocaleTimeString()}</strong>
+                        <p style="margin: 5px 0 0; font-size: 13px;">
+                            Lütfen başka bir hisse deneyin.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // FİYAT KONTROLÜ
+            if (!data.price) {
+                info.innerHTML = `
+                    <div class="error-box">
+                        <strong>⚠️ Fiyat bilgisi alınamadı</strong>
+                        <p style="margin: 5px 0 0; font-size: 13px;">
+                            ${symbol} için fiyat bilgisi şu an mevcut değil.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // ✅ BAŞARILI - VERİYİ GÖSTER
+            const changeClass = data.change >= 0 ? 'positive' : 'negative';
+            const changeSymbol = data.change >= 0 ? '▲' : '▼';
+            
+            info.innerHTML = `
+                <h4>${data.symbol}</h4>
+                <p style="font-size: 12px; color: #888;">${data.name || ''}</p>
+                <p class="price">${data.price} ₺</p>
+                <p class="${changeClass}">
+                    ${changeSymbol} ${Math.abs(data.change)}%
+                </p>
+                <hr style="margin: 10px 0;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 13px;">
+                    <p><strong>Günlük Yüksek:</strong> ${data.high || '-'} ₺</p>
+                    <p><strong>Günlük Düşük:</strong> ${data.low || '-'} ₺</p>
+                    <p><strong>Açılış:</strong> ${data.open || '-'} ₺</p>
+                    <p><strong>Hacim:</strong> ${data.volume ? (data.volume / 1000).toFixed(1) + 'K' : '-'}</p>
+                </div>
+                <hr style="margin: 10px 0;">
+                <p style="font-size: 11px; color: #888; margin: 0;">
+                    Kaynak: ${data.source || 'BIST'} | ${new Date().toLocaleTimeString()}
+                </p>
+                ${data.info ? `<p style="font-size: 11px; color: #999; margin: 5px 0 0;">${data.info}</p>` : ''}
+            `;
+            
+            console.log(`✅ ${symbol} başarıyla gösterildi`);
+            
+        } catch (err) {
+            console.error(`❌ ${symbol} hatası:`, err);
+            info.innerHTML = `
+                <div class="error-box">
+                    <strong>❌ Bağlantı hatası</strong>
+                    <p style="margin: 5px 0 0; font-size: 13px;">
+                        ${err.message || 'Beklenmeyen bir hata oluştu.'}
                     </p>
                 </div>
             `;
-            return;
         }
-        
-        // Başarılı sonuç gösterimi...
-        // (önceki kod aynı)
-        
-    } catch (err) {
-        info.innerHTML = `
-            <div style="background: #f8d7da; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;">
-                <p style="color: #721c24; margin: 0;">
-                    <strong>❌ Hata:</strong> ${err.message}
-                </p>
-            </div>
-        `;
     }
-}
+
     // ============================================================
     // AI CHAT
     // ============================================================
@@ -163,14 +258,14 @@ async function fetchStock(symbol) {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: 'user1', message: msg })
+                body: JSON.stringify({ message: msg })
             });
             
             const data = await res.json();
-            chatBox.innerHTML += `<div class="msg-bot">${data.reply}</div>`;
+            chatBox.innerHTML += `<div class="msg-bot">${data.reply || 'Bir hata oluştu.'}</div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         } catch (err) {
-            chatBox.innerHTML += `<div class="msg-bot">Hata: ${err.message}</div>`;
+            chatBox.innerHTML += `<div class="msg-bot">❌ Hata: ${err.message}</div>`;
         }
     }
 </script>

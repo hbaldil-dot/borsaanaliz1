@@ -3,92 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yapay Zeka Asistanı</title>
+    <title>Borsa Analiz & AI Panel</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
-        .chat-container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        .chat-box { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .main-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; height: 85vh; }
+        
+        /* Sol Panel: Borsa Verileri */
+        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; }
+        .stock-list { display: flex; gap: 8px; flex-wrap: wrap; }
+        .stock-btn { padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .stock-btn:hover { background: #0056b3; }
+        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; }
+        
+        /* Sağ Panel: Chat */
+        .chat-container { flex: 2; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        .chat-box { flex: 1; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
         .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 5px; max-width: 80%; }
-        .user { background: #007bff; color: white; margin-left: auto; text-align: right; }
+        .user { background: #007bff; color: white; margin-left: auto; }
         .bot { background: #e9ecef; color: black; }
         .input-box { display: flex; gap: 10px; }
         input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:disabled { background: #6c757d; cursor: not-allowed; }
+        button.send-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div class="chat-container">
-    <h2>Yapay Zeka Asistanı</h2>
-    <div class="chat-box" id="chatBox"></div>
-    <div class="input-box">
-        <input type="text" id="userInput" placeholder="Mesajınızı yazın..." onkeypress="handleKeyPress(event)">
-        <button id="sendBtn" onclick="sendMessage()">Gönder</button>
+<div class="main-container">
+    <!-- SOL TARAF: Borsa Hisseleri & Veri Ekranı -->
+    <div class="sidebar">
+        <h3>BIST Hisseleri</h3>
+        <div class="stock-list">
+            <button class="stock-btn" onclick="fetchStock('THYAO')">THYAO</button>
+            <button class="stock-btn" onclick="fetchStock('GARAN')">GARAN</button>
+            <button class="stock-btn" onclick="fetchStock('EREGL')">EREGL</button>
+            <button class="stock-btn" onclick="fetchStock('AKBNK')">AKBNK</button>
+            <button class="stock-btn" onclick="fetchStock('SASA')">SASA</button>
+        </div>
+
+        <div class="stock-card" id="stockCard">
+            <h4>Hisse Seçin</h4>
+            <p>Fiyatı ve son yıllara ait kâr durumunu görmek için yukarıdaki hisselerden birine tıklayın.</p>
+        </div>
+    </div>
+
+    <!-- SAĞ TARAF: Yapay Zeka Sohbeti -->
+    <div class="chat-container">
+        <h3>Yapay Zeka Asistanı</h3>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="input-box">
+            <input type="text" id="userInput" placeholder="Mesajınızı yazın..." onkeypress="if(event.key==='Enter') sendMessage()">
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">Gönder</button>
+        </div>
     </div>
 </div>
 
 <script>
+    // Hisse Tıklandığında Veri Çeken Fonksiyon (Gemini Çağrılmaz)
+    async function fetchStock(symbol) {
+        const card = document.getElementById("stockCard");
+        card.innerHTML = `<p><strong>${symbol}</strong> verileri yükleniyor...</p>`;
+
+        try {
+            const res = await fetch(`/api/stock/${symbol}`);
+            const data = await res.json();
+
+            if (data.error) {
+                card.innerHTML = `<p style="color:red;">Hata: ${data.error}</p>`;
+                return;
+            }
+
+            let profitHTML = "<ul>";
+            if (typeof data.profits === 'object') {
+                for (const [year, netProfit] of Object.entries(data.profits)) {
+                    profitHTML += `<li><strong>${year}:</strong> ${netProfit}</li>`;
+                }
+                profitHTML += "</ul>";
+            } else {
+                profitHTML = `<p>${data.profits}</p>`;
+            }
+
+            card.innerHTML = `
+                <h4>${data.symbol} Detayı</h4>
+                <p><strong>Güncel Fiyat (15 dk gecikmeli):</strong> ${data.price}</p>
+                <hr>
+                <h5>Yıllık Net Kâr Durumu:</h5>
+                ${profitHTML}
+            `;
+        } catch (err) {
+            card.innerHTML = `<p style="color:red;">Veri çekme hatası oluştu.</p>`;
+        }
+    }
+
+    // Chat Mesaj Gönderme
     async function sendMessage() {
         const input = document.getElementById("userInput");
-        const sendBtn = document.getElementById("sendBtn");
         const chatBox = document.getElementById("chatBox");
-        const message = input.value.trim();
+        const msg = input.value.trim();
 
-        if (!message) return;
+        if (!msg) return;
 
-        // Kullanıcı mesajını ekle
-        chatBox.innerHTML += `<div class="message user">${message}</div>`;
+        chatBox.innerHTML += `<div class="message user">${msg}</div>`;
         input.value = "";
         chatBox.scrollTop = chatBox.scrollHeight;
 
         try {
-            const response = await fetch("/api/chat", {
+            const res = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: "demo_user", message: message })
+                body: JSON.stringify({ user_id: "demo_user", message: msg })
             });
 
-            const data = await response.json();
+            const data = await res.json();
             chatBox.innerHTML += `<div class="message bot">${data.reply}</div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
-
-            // Eğer kotaya takılındıysa geri sayımı başlat
-            if (data.retry_after && data.retry_after > 0) {
-                startCountdown(data.retry_after);
-            }
-
-        } catch (error) {
-            chatBox.innerHTML += `<div class="message bot">Bağlantı hatası oluştu.</div>`;
-        }
-    }
-
-    function startCountdown(seconds) {
-        const sendBtn = document.getElementById("sendBtn");
-        const input = document.getElementById("userInput");
-        
-        sendBtn.disabled = true;
-        input.disabled = true;
-
-        let timeLeft = seconds;
-        sendBtn.innerText = `Bekleyin (${timeLeft}s)`;
-
-        const timer = setInterval(() => {
-            timeLeft--;
-            sendBtn.innerText = `Bekleyin (${timeLeft}s)`;
-
-            if (timeLeft <= 0) {
-                clearInterval(timer);
-                sendBtn.disabled = false;
-                input.disabled = false;
-                sendBtn.innerText = "Gönder";
-            }
-        }, 1000);
-    }
-
-    function handleKeyPress(event) {
-        if (event.key === "Enter") {
-            sendMessage();
+        } catch (err) {
+            chatBox.innerHTML += `<div class="message bot">Hata oluştu.</div>`;
         }
     }
 </script>

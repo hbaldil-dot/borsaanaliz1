@@ -106,35 +106,55 @@
     // HİSSE DETAYI ÇEK
     // ============================================================
     
-    async function fetchStock(symbol) {
-        if (!symbol) return;
+async function fetchStock(symbol) {
+    if (!symbol) return;
+    
+    const info = document.getElementById('stockInfo');
+    info.innerHTML = `<p>⏳ ${symbol} yükleniyor...</p>`;
+    
+    try {
+        const res = await fetch(`/api/stock/${symbol}`);
+        const data = await res.json();
         
-        const info = document.getElementById('stockInfo');
-        info.innerHTML = `<p>⏳ ${symbol} yükleniyor...</p>`;
-        
-        try {
-            const res = await fetch(`/api/stock/${symbol}`);
-            const data = await res.json();
-            
-            if (data.error) {
-                info.innerHTML = `<p style="color:red;">${data.error}</p>`;
-                return;
-            }
-            
+        if (data.error) {
             info.innerHTML = `
-                <h4>${data.symbol}</h4>
-                <p><strong>Fiyat:</strong> ${data.price} ₺</p>
-                <p><strong>Değişim:</strong> ${data.change}%</p>
-                <p><strong>Hacim:</strong> ${data.volume.toLocaleString()}</p>
-                <p><strong>Piyasa Değeri:</strong> ${(data.market_cap / 1e9).toFixed(2)} Milyar ₺</p>
-                <p><strong>F/K:</strong> ${data.pe_ratio || '-'}</p>
-                <p><strong>Temettü:</strong> ${data.dividend_yield ? (data.dividend_yield * 100).toFixed(2) + '%' : '-'}</p>
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffc107;">
+                    <p style="color: #856404; margin: 0;">
+                        <strong>⚠️ ${data.error}</strong>
+                    </p>
+                    <p style="color: #856404; margin: 5px 0 0; font-size: 13px;">
+                        Bu hisse için şu an veri alınamıyor. Lütfen başka bir hisse deneyin.
+                    </p>
+                </div>
             `;
-        } catch (err) {
-            info.innerHTML = `<p style="color:red;">Hata: ${err.message}</p>`;
+            return;
         }
+        
+        info.innerHTML = `
+            <h4 style="color: #007bff; margin: 0 0 10px 0;">${data.symbol}</h4>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <p style="margin: 4px 0;"><strong>Fiyat:</strong> ${data.price} ₺</p>
+                <p style="margin: 4px 0; color: ${data.change >= 0 ? 'green' : 'red'};">
+                    <strong>Değişim:</strong> ${data.change}%
+                </p>
+                <p style="margin: 4px 0;"><strong>Hacim:</strong> ${(data.volume / 1000).toFixed(1)}K</p>
+                <p style="margin: 4px 0;"><strong>F/K:</strong> ${data.pe_ratio || '-'}</p>
+            </div>
+            <hr style="margin: 10px 0;">
+            <p style="margin: 4px 0; font-size: 13px; color: #666;">
+                <strong>Piyasa Değeri:</strong> ${(data.market_cap / 1e9).toFixed(2)} Milyar ₺
+            </p>
+        `;
+    } catch (err) {
+        info.innerHTML = `
+            <div style="background: #f8d7da; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;">
+                <p style="color: #721c24; margin: 0;">
+                    <strong>❌ Hata:</strong> ${err.message}
+                </p>
+            </div>
+        `;
     }
-
+}
     // ============================================================
     // AI CHAT
     // ============================================================

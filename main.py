@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 app = FastAPI()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MONGO_URI = os.getenv("MONGO_URI")
+MONGO_URI = os.getenv("MONGODB_URI")
 
 class ChatRequest(BaseModel):
     user_id: str

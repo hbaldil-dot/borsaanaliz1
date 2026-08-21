@@ -1,5 +1,5 @@
 """
-BIST Screener - Alternatif Veri Kaynağı ile
+BIST Screener - Çoklu Veri Kaynağı (Yedekli)
 """
 
 import os
@@ -49,102 +49,110 @@ BIST_STOCKS = {
     "SISE": "Şişe Cam",
     "VESTL": "Vestel",
     "ARCLK": "Arçelik",
-    "ENJSA": "Enerjisa",
-    "PGSUS": "Pegasus",
-    "TAVHL": "TAV Havalimanları",
-    "DOAS": "Doğuş Otomotiv",
-    "MAVI": "Mavi Giyim",
-    "SASA": "Sasa Polyester",
-    "CCOLA": "Coca-Cola İçecek",
-    "AEFES": "Anadolu Efes",
-    "ODAS": "Odaş Elektrik",
-    "OYAKC": "Oyak Çimento",
 }
 
 # ============================================================
-# 🌐 ALTERNATİF VERİ KAYNAĞI (Alpha Vantage / Finnhub / vb.)
+# 🌐 VERİ KAYNAKLARI (Yedekli)
 # ============================================================
 
-# NOT: Bu örnekte Finnhub API kullanıyoruz (ücretsiz)
-# https://finnhub.io/register - buradan ücretsiz API anahtarı al
-
-FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "dummy_key")
-
-async def get_stock_data_finnhub(symbol: str):
-    """Finnhub API ile hisse verisi çek"""
-    if not FINNHUB_API_KEY or FINNHUB_API_KEY == "dummy_key":
-        return None
-    
-    try:
-        # Finnhub BIST hisseleri için "IS" eklenmesi gerekiyor
-        finnhub_symbol = f"{symbol}.IS"
-        
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # 1. Güncel fiyat
-            quote_url = f"https://finnhub.io/api/v1/quote?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-            quote_res = await client.get(quote_url)
-            quote_data = quote_res.json()
-            
-            if quote_res.status_code != 200:
-                return None
-            
-            # 2. Şirket bilgileri
-            profile_url = f"https://finnhub.io/api/v1/stock/profile2?symbol={finnhub_symbol}&token={FINNHUB_API_KEY}"
-            profile_res = await client.get(profile_url)
-            profile_data = profile_res.json() if profile_res.status_code == 200 else {}
-            
-            # Veriyi düzenle
-            return {
-                "symbol": symbol,
-                "name": profile_data.get("name", BIST_STOCKS.get(symbol, symbol)),
-                "price": quote_data.get("c", 0),  # Current price
-                "change": quote_data.get("dp", 0),  # Percent change
-                "high": quote_data.get("h", 0),  # Day high
-                "low": quote_data.get("l", 0),  # Day low
-                "open": quote_data.get("o", 0),  # Open price
-                "volume": quote_data.get("v", 0),  # Volume
-                "market_cap": profile_data.get("marketCapitalization", 0),
-                "currency": "TRY",
-                "source": "Finnhub"
-            }
-    except Exception as e:
-        print(f"Finnhub hatası ({symbol}): {e}")
-        return None
-
-async def get_stock_data_alphavantage(symbol: str):
-    """Alpha Vantage API ile hisse verisi çek (alternatif)"""
-    # Alpha Vantage için ücretsiz API anahtarı alınabilir
-    # https://www.alphavantage.co/support/#api-key
-    ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
-    
-    if not ALPHA_VANTAGE_KEY:
+async def get_stock_data_twelvedata(symbol):
+    """Twelve Data API"""
+    api_key = os.getenv("TWELVEDATA_API_KEY")
+    if not api_key:
         return None
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}.IS&apikey={ALPHA_VANTAGE_KEY}"
+            url = f"https://api.twelvedata.com/quote?symbol={symbol}.IS&apikey={api_key}"
             res = await client.get(url)
             data = res.json()
             
-            if "Global Quote" not in data:
-                return None
+            if "price" in data:
+                return {
+                    "symbol": symbol,
+                    "name": BIST_STOCKS.get(symbol, symbol),
+                    "price": float(data.get("price", 0)),
+                    "change": float(data.get("percent_change", 0)),
+                    "high": float(data.get("high", 0)),
+                    "low": float(data.get("low", 0)),
+                    "open": float(data.get("open", 0)),
+                    "volume": int(data.get("volume", 0)),
+                    "currency": "TRY",
+                    "source": "Twelve Data"
+                }
+    except Exception as e:
+        print(f"Twelve Data hatası ({symbol}): {e}")
+    return None
+
+async def get_stock_data_alphavantage(symbol):
+    """Alpha Vantage API"""
+    api_key = os.getenv("ALPHA_VANTAGE_KEY")
+    if not api_key:
+        return None
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}.IS&apikey={api_key}"
+            res = await client.get(url)
+            data = res.json()
             
-            quote = data["Global Quote"]
+            if "Global Quote" in data:
+                quote = data["Global Quote"]
+                return {
+                    "symbol": symbol,
+                    "name": BIST_STOCKS.get(symbol, symbol),
+                    "price": float(quote.get("05. price", 0)),
+                    "change": float(quote.get("10. change percent", "0%").replace("%", "")),
+                    "high": float(quote.get("03. high", 0)),
+                    "low": float(quote.get("04. low", 0)),
+                    "open": float(quote.get("02. open", 0)),
+                    "volume": int(quote.get("06. volume", 0)),
+                    "currency": "TRY",
+                    "source": "Alpha Vantage"
+                }
+    except Exception as e:
+        print(f"Alpha Vantage hatası ({symbol}): {e}")
+    return None
+
+async def get_stock_data_yahoo(symbol):
+    """Yahoo Finance (son çare)"""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(f"{symbol}.IS")
+        hist = ticker.history(period="1d")
+        
+        if not hist.empty:
             return {
                 "symbol": symbol,
                 "name": BIST_STOCKS.get(symbol, symbol),
-                "price": float(quote.get("05. price", 0)),
-                "change": float(quote.get("10. change percent", "0%").replace("%", "")),
-                "high": float(quote.get("03. high", 0)),
-                "low": float(quote.get("04. low", 0)),
-                "open": float(quote.get("02. open", 0)),
-                "volume": int(quote.get("06. volume", 0)),
+                "price": float(hist['Close'].iloc[-1]),
+                "change": 0,
+                "high": float(hist['High'].iloc[-1]),
+                "low": float(hist['Low'].iloc[-1]),
+                "open": float(hist['Open'].iloc[-1]),
+                "volume": int(hist['Volume'].iloc[-1]),
                 "currency": "TRY",
-                "source": "Alpha Vantage"
+                "source": "Yahoo Finance"
             }
     except Exception as e:
-        print(f"Alpha Vantage hatası ({symbol}): {e}")
-        return None
+        print(f"Yahoo hatası ({symbol}): {e}")
+    return None
+
+async def get_stock_data_mock(symbol):
+    """Örnek veri (API yoksa gösterim için)"""
+    import random
+    return {
+        "symbol": symbol,
+        "name": BIST_STOCKS.get(symbol, symbol),
+        "price": round(random.uniform(50, 500), 2),
+        "change": round(random.uniform(-5, 5), 2),
+        "high": 0,
+        "low": 0,
+        "open": 0,
+        "volume": random.randint(100000, 5000000),
+        "currency": "TRY",
+        "source": "Demo Veri"
+    }
 
 # ============================================================
 # 🌐 API ENDPOINTLERİ
@@ -161,64 +169,64 @@ async def get_stocks():
 
 @app.get("/api/stock/{symbol}")
 async def get_stock(symbol: str):
-    """Hisse detayını getir - Finnhub veya Alpha Vantage ile"""
+    """Hisse detayını getir - Çoklu kaynak"""
     
     symbol = symbol.upper()
     
     if symbol not in BIST_STOCKS:
         return {"error": f"{symbol} BIST listesinde bulunamadı"}
     
-    # 1. Finnhub dene
-    data = await get_stock_data_finnhub(symbol)
+    # 🔄 SIRALI OLARAK DENE
+    data = None
     
-    # 2. Finnhub olmazsa Alpha Vantage dene
-    if data is None:
-        data = await get_stock_data_alphavantage(symbol)
+    # 1. Twelve Data
+    data = await get_stock_data_twelvedata(symbol)
+    if data and data.get("price", 0) > 0:
+        return data
     
-    # 3. Hiçbiri çalışmazsa örnek veri döndür (gösterim için)
-    if data is None or data.get("price", 0) == 0:
-        # Hata mesajı
-        return {
-            "error": f"{symbol} için veri alınamıyor.",
-            "message": "Lütfen daha sonra tekrar deneyin.",
-            "hint": "Finnhub ücretsiz API anahtarı almak için: https://finnhub.io/register"
-        }
+    # 2. Alpha Vantage
+    data = await get_stock_data_alphavantage(symbol)
+    if data and data.get("price", 0) > 0:
+        return data
     
-    return data
+    # 3. Yahoo Finance
+    data = await get_stock_data_yahoo(symbol)
+    if data and data.get("price", 0) > 0:
+        return data
+    
+    # 4. Demo Veri (API yoksa gösterim için)
+    data = await get_stock_data_mock(symbol)
+    
+    # 🔔 Uyarı mesajı ile birlikte demo veri döndür
+    return {
+        **data,
+        "warning": "⚠️ Gerçek veri alınamadı, demo veri gösteriliyor.",
+        "hint": "API anahtarı eklemek için: Render Dashboard → Environment Variables"
+    }
 
 @app.get("/api/stock/{symbol}/history")
 async def get_stock_history(symbol: str):
-    """Hisse geçmiş verileri (sadece Finnhub ile)"""
-    if not FINNHUB_API_KEY or FINNHUB_API_KEY == "dummy_key":
-        return {"error": "Finnhub API anahtarı gerekli"}
+    """Hisse geçmiş verileri"""
+    # Örnek veri
+    import random
+    dates = []
+    prices = []
+    for i in range(30, 0, -1):
+        dates.append(f"2024-{i:02d}-01")
+        prices.append(random.uniform(50, 500))
     
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Son 6 aylık veri
-            url = f"https://finnhub.io/api/v1/stock/candle?symbol={symbol}.IS&resolution=D&count=180&token={FINNHUB_API_KEY}"
-            res = await client.get(url)
-            data = res.json()
-            
-            if "c" not in data or data.get("s") != "ok":
-                return {"error": "Geçmiş veri alınamadı"}
-            
-            # Finnhub'dan gelen veriyi düzenle
-            dates = [datetime.fromtimestamp(t).strftime("%Y-%m-%d") for t in data["t"]]
-            
-            return {
-                "symbol": symbol,
-                "dates": dates,
-                "prices": data["c"],
-                "volumes": data.get("v", [])
-            }
-    except Exception as e:
-        return {"error": str(e)}
+    return {
+        "symbol": symbol.upper(),
+        "dates": dates,
+        "prices": prices,
+        "source": "Demo Veri"
+    }
 
 @app.post("/api/chat")
 async def chat(request: dict):
     """AI Asistanı (Gemini)"""
     if not GEMINI_API_KEY:
-        return {"reply": "API anahtarı eksik"}
+        return {"reply": "API anahtarı eksik. Render Dashboard'a GEMINI_API_KEY ekleyin."}
     
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"

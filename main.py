@@ -1,10 +1,10 @@
 """
-BIST Screener - Çoklu Veri Kaynağı (Yedekli)
+BIST Screener - Demo Veri ile Çalışan Versiyon
 """
 
 import os
+import random
 import httpx
-from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +25,7 @@ app.add_middleware(
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ============================================================
-# 📊 BIST HİSSE LİSTESİ (Gerçek kodlar)
+# 📊 BIST HİSSE LİSTESİ
 # ============================================================
 
 BIST_STOCKS = {
@@ -49,110 +49,17 @@ BIST_STOCKS = {
     "SISE": "Şişe Cam",
     "VESTL": "Vestel",
     "ARCLK": "Arçelik",
+    "ENJSA": "Enerjisa",
+    "PGSUS": "Pegasus",
+    "TAVHL": "TAV Havalimanları",
+    "DOAS": "Doğuş Otomotiv",
+    "MAVI": "Mavi Giyim",
+    "SASA": "Sasa Polyester",
+    "CCOLA": "Coca-Cola İçecek",
+    "AEFES": "Anadolu Efes",
+    "ODAS": "Odaş Elektrik",
+    "OYAKC": "Oyak Çimento",
 }
-
-# ============================================================
-# 🌐 VERİ KAYNAKLARI (Yedekli)
-# ============================================================
-
-async def get_stock_data_twelvedata(symbol):
-    """Twelve Data API"""
-    api_key = os.getenv("TWELVEDATA_API_KEY")
-    if not api_key:
-        return None
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            url = f"https://api.twelvedata.com/quote?symbol={symbol}.IS&apikey={api_key}"
-            res = await client.get(url)
-            data = res.json()
-            
-            if "price" in data:
-                return {
-                    "symbol": symbol,
-                    "name": BIST_STOCKS.get(symbol, symbol),
-                    "price": float(data.get("price", 0)),
-                    "change": float(data.get("percent_change", 0)),
-                    "high": float(data.get("high", 0)),
-                    "low": float(data.get("low", 0)),
-                    "open": float(data.get("open", 0)),
-                    "volume": int(data.get("volume", 0)),
-                    "currency": "TRY",
-                    "source": "Twelve Data"
-                }
-    except Exception as e:
-        print(f"Twelve Data hatası ({symbol}): {e}")
-    return None
-
-async def get_stock_data_alphavantage(symbol):
-    """Alpha Vantage API"""
-    api_key = os.getenv("ALPHA_VANTAGE_KEY")
-    if not api_key:
-        return None
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}.IS&apikey={api_key}"
-            res = await client.get(url)
-            data = res.json()
-            
-            if "Global Quote" in data:
-                quote = data["Global Quote"]
-                return {
-                    "symbol": symbol,
-                    "name": BIST_STOCKS.get(symbol, symbol),
-                    "price": float(quote.get("05. price", 0)),
-                    "change": float(quote.get("10. change percent", "0%").replace("%", "")),
-                    "high": float(quote.get("03. high", 0)),
-                    "low": float(quote.get("04. low", 0)),
-                    "open": float(quote.get("02. open", 0)),
-                    "volume": int(quote.get("06. volume", 0)),
-                    "currency": "TRY",
-                    "source": "Alpha Vantage"
-                }
-    except Exception as e:
-        print(f"Alpha Vantage hatası ({symbol}): {e}")
-    return None
-
-async def get_stock_data_yahoo(symbol):
-    """Yahoo Finance (son çare)"""
-    try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol}.IS")
-        hist = ticker.history(period="1d")
-        
-        if not hist.empty:
-            return {
-                "symbol": symbol,
-                "name": BIST_STOCKS.get(symbol, symbol),
-                "price": float(hist['Close'].iloc[-1]),
-                "change": 0,
-                "high": float(hist['High'].iloc[-1]),
-                "low": float(hist['Low'].iloc[-1]),
-                "open": float(hist['Open'].iloc[-1]),
-                "volume": int(hist['Volume'].iloc[-1]),
-                "currency": "TRY",
-                "source": "Yahoo Finance"
-            }
-    except Exception as e:
-        print(f"Yahoo hatası ({symbol}): {e}")
-    return None
-
-async def get_stock_data_mock(symbol):
-    """Örnek veri (API yoksa gösterim için)"""
-    import random
-    return {
-        "symbol": symbol,
-        "name": BIST_STOCKS.get(symbol, symbol),
-        "price": round(random.uniform(50, 500), 2),
-        "change": round(random.uniform(-5, 5), 2),
-        "high": 0,
-        "low": 0,
-        "open": 0,
-        "volume": random.randint(100000, 5000000),
-        "currency": "TRY",
-        "source": "Demo Veri"
-    }
 
 # ============================================================
 # 🌐 API ENDPOINTLERİ
@@ -169,54 +76,47 @@ async def get_stocks():
 
 @app.get("/api/stock/{symbol}")
 async def get_stock(symbol: str):
-    """Hisse detayını getir - Çoklu kaynak"""
+    """Hisse detayını getir (Demo veri)"""
     
     symbol = symbol.upper()
     
     if symbol not in BIST_STOCKS:
         return {"error": f"{symbol} BIST listesinde bulunamadı"}
     
-    # 🔄 SIRALI OLARAK DENE
-    data = None
+    # 🎯 Demo veri oluştur
+    price = round(random.uniform(50, 500), 2)
+    change = round(random.uniform(-5, 5), 2)
     
-    # 1. Twelve Data
-    data = await get_stock_data_twelvedata(symbol)
-    if data and data.get("price", 0) > 0:
-        return data
-    
-    # 2. Alpha Vantage
-    data = await get_stock_data_alphavantage(symbol)
-    if data and data.get("price", 0) > 0:
-        return data
-    
-    # 3. Yahoo Finance
-    data = await get_stock_data_yahoo(symbol)
-    if data and data.get("price", 0) > 0:
-        return data
-    
-    # 4. Demo Veri (API yoksa gösterim için)
-    data = await get_stock_data_mock(symbol)
-    
-    # 🔔 Uyarı mesajı ile birlikte demo veri döndür
     return {
-        **data,
-        "warning": "⚠️ Gerçek veri alınamadı, demo veri gösteriliyor.",
-        "hint": "API anahtarı eklemek için: Render Dashboard → Environment Variables"
+        "symbol": symbol,
+        "name": BIST_STOCKS.get(symbol, symbol),
+        "price": price,
+        "change": change,
+        "high": round(price * (1 + random.uniform(0.01, 0.04)), 2),
+        "low": round(price * (1 - random.uniform(0.01, 0.04)), 2),
+        "open": round(price * (1 + random.uniform(-0.02, 0.02)), 2),
+        "volume": random.randint(100000, 5000000),
+        "currency": "TRY",
+        "source": "Demo Veri",
+        "info": "⚠️ Gerçek veri alınamadığı için demo veri gösteriliyor"
     }
 
 @app.get("/api/stock/{symbol}/history")
 async def get_stock_history(symbol: str):
-    """Hisse geçmiş verileri"""
-    # Örnek veri
-    import random
+    """Hisse geçmiş verileri (Demo)"""
+    
+    symbol = symbol.upper()
+    
     dates = []
     prices = []
+    base_price = random.uniform(50, 500)
+    
     for i in range(30, 0, -1):
         dates.append(f"2024-{i:02d}-01")
-        prices.append(random.uniform(50, 500))
+        prices.append(round(base_price * (1 + random.uniform(-0.2, 0.2)), 2))
     
     return {
-        "symbol": symbol.upper(),
+        "symbol": symbol,
         "dates": dates,
         "prices": prices,
         "source": "Demo Veri"
@@ -232,8 +132,8 @@ async def chat(request: dict):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"
         payload = {"contents": [{"parts": [{"text": request.get("message", "")}]}]}
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, timeout=30.0)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
             data = response.json()
             
             if response.status_code == 200:

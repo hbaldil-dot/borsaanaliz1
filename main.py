@@ -23,8 +23,8 @@ async def chat(request: ChatRequest):
     if not GEMINI_API_KEY:
         return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!"}
 
-    # Güncel Gemini REST API Endpoint Adresi
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # Güncel Gemini 3.6 REST API Endpoint Adresi
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
     
     payload = {
         "contents": [{

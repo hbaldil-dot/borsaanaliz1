@@ -3,64 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Borsa Analiz & AI Panel</title>
+    <title>BIST Screener - Çok Katmanlı Analiz</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .main-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; height: 85vh; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         
-        .sidebar { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; position: relative; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; position: relative; }
-        label { font-weight: bold; font-size: 14px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: white; padding: 20px 30px; border-radius: 12px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .header p { margin: 5px 0 0; opacity: 0.8; font-size: 14px; }
         
-        .search-select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; text-transform: uppercase; cursor: pointer; }
-        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 250px; overflow-y: auto; background: white; border: 1px solid #ccc; border-radius: 0 0 5px 5px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .dropdown-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; }
-        .dropdown-item:hover { background-color: #007bff; color: white; }
-
-        .stock-card { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; flex: 1; overflow-y: auto; margin-top: 10px; }
+        .main-grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; height: calc(100vh - 140px); }
         
-        .chat-container { flex: 2; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
-        .chat-box { flex: 1; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-        .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 5px; max-width: 80%; }
-        .user { background: #007bff; color: white; margin-left: auto; }
-        .bot { background: #e9ecef; color: black; }
+        /* Sidebar */
+        .sidebar { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        
+        .sidebar h3 { margin: 0 0 5px 0; font-size: 16px; color: #1a1a2e; }
+        .sidebar label { font-size: 13px; font-weight: 600; color: #555; }
+        
+        .search-select { width: 100%; padding: 10px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; text-transform: uppercase; transition: border-color 0.3s; }
+        .search-select:focus { border-color: #007bff; outline: none; }
+        
+        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 2px solid #007bff; border-top: none; border-radius: 0 0 8px 8px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .dropdown-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; transition: background 0.2s; }
+        .dropdown-item:hover { background: #007bff; color: white; }
+        
+        .form-group { position: relative; }
+        
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 5px; }
+        .btn { padding: 10px 12px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.3s; color: white; text-align: center; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn-blue { background: #007bff; }
+        .btn-green { background: #28a745; }
+        .btn-orange { background: #fd7e14; }
+        .btn-purple { background: #6f42c1; }
+        .btn-red { background: #dc3545; }
+        .btn-teal { background: #20c997; }
+        .btn-full { grid-column: 1 / -1; }
+        
+        .stock-card { background: #f8f9fa; border-radius: 8px; padding: 15px; border: 1px solid #e9ecef; flex: 1; overflow-y: auto; min-height: 150px; }
+        .stock-card h4 { margin: 0 0 8px 0; color: #1a1a2e; }
+        .stock-card p { margin: 4px 0; font-size: 13px; color: #555; }
+        .stock-card .highlight { color: #007bff; font-weight: 600; }
+        
+        /* Chat */
+        .chat-container { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+        .chat-container h3 { margin: 0 0 12px 0; font-size: 16px; color: #1a1a2e; }
+        
+        .chat-box { flex: 1; overflow-y: auto; border: 2px solid #f0f0f0; padding: 15px; border-radius: 8px; margin-bottom: 12px; min-height: 200px; max-height: 400px; }
+        .message { margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 14px; line-height: 1.5; }
+        .user { background: #007bff; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
+        .bot { background: #f1f3f5; color: #1a1a2e; margin-right: auto; border-bottom-left-radius: 4px; }
+        
         .input-box { display: flex; gap: 10px; }
-        .input-box input { flex: 1; text-transform: none; }
-        button.send-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .input-box input { flex: 1; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; transition: border-color 0.3s; }
+        .input-box input:focus { border-color: #007bff; outline: none; }
+        .send-btn { padding: 10px 24px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.3s; }
+        .send-btn:hover { background: #218838; }
+        
+        /* Results */
+        #layerResults { background: white; border-radius: 12px; padding: 20px; margin-top: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-height: 500px; overflow-y: auto; display: none; }
+        #layerResults h4 { margin: 0 0 10px 0; color: #1a1a2e; }
+        #layerResults h5 { margin: 15px 0 8px 0; color: #495057; }
+        
+        table { width: 100%; font-size: 12px; border-collapse: collapse; }
+        table th { background: #f8f9fa; padding: 8px 10px; text-align: left; border: 1px solid #dee2e6; font-weight: 600; position: sticky; top: 0; z-index: 10; }
+        table td { padding: 6px 10px; border: 1px solid #dee2e6; }
+        table tr:hover { background: #f8f9fa; }
+        .table-wrap { max-height: 400px; overflow-y: auto; }
+        
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .badge-green { background: #d4edda; color: #155724; }
+        .badge-red { background: #f8d7da; color: #721c24; }
+        .badge-blue { background: #cce5ff; color: #004085; }
+        
+        @media (max-width: 900px) {
+            .main-grid { grid-template-columns: 1fr; height: auto; }
+            .sidebar { max-height: 400px; }
+            .btn-group { grid-template-columns: 1fr 1fr; }
+        }
     </style>
 </head>
 <body>
 
-<div class="main-container">
-    <div class="sidebar">
-        <h3>BIST Hisse Sorgula</h3>
-        
-        <div class="form-group">
-            <label for="stockInput">Tüm BIST Hisseleri (Arayın veya Seçin):</label>
-            <input type="text" id="stockInput" class="search-select" placeholder="Hisse Yazın veya Seçin..." oninput="filterStocks()" onclick="showDropdown()" autocomplete="off">
-            <div id="dropdownMenu" class="dropdown-menu"></div>
+<div class="container">
+    <!-- HEADER -->
+    <div class="header">
+        <h1>📊 BIST Çok Katmanlı Screener</h1>
+        <p>3 Katmanlı Filtreleme | 15 Dakikada Otomatik Analiz | Yapay Zeka Destekli</p>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <h3>🔍 Hisse Sorgula</h3>
+            
+            <div class="form-group">
+                <label for="stockInput">BIST Hissesi Ara:</label>
+                <input type="text" id="stockInput" class="search-select" placeholder="Hisse kodu yazın..." oninput="filterStocks()" onclick="showDropdown()" autocomplete="off">
+                <div id="dropdownMenu" class="dropdown-menu"></div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-blue" onclick="runLayer(1)">🎯 Katman 1</button>
+                <button class="btn btn-green" onclick="runLayer(2)">📊 Katman 2</button>
+                <button class="btn btn-orange" onclick="runLayer(3)">📈 Katman 3</button>
+                <button class="btn btn-red btn-full" onclick="runFullScreener()">🔥 Tüm Katmanlar</button>
+            </div>
+
+            <div class="stock-card" id="stockCard">
+                <h4>📌 Hisse Seçin</h4>
+                <p>Listeden bir hisse seçtiğinizde detaylı veriler görüntülenecektir.</p>
+            </div>
         </div>
 
-        <div class="stock-card" id="stockCard">
-            <h4>Hisse Seçin</h4>
-            <p>Listeden bir hisse seçtiğinizde 15 dk gecikmeli veriler çekilecektir.</p>
+        <!-- CHAT -->
+        <div class="chat-container">
+            <h3>🤖 Yapay Zeka Asistanı</h3>
+            <div class="chat-box" id="chatBox">
+                <div class="message bot">Merhaba! BIST hisseleri hakkında sorularınızı yanıtlayabilirim. Hangi hisseyi merak ediyorsunuz?</div>
+            </div>
+            <div class="input-box">
+                <input type="text" id="userInput" placeholder="Mesajınızı yazın..." onkeypress="if(event.key==='Enter') sendMessage()">
+                <button class="send-btn" onclick="sendMessage()">Gönder</button>
+            </div>
         </div>
     </div>
 
-    <div class="chat-container">
-        <h3>Yapay Zeka Asistanı</h3>
-        <div class="chat-box" id="chatBox"></div>
-        <div class="input-box">
-            <input type="text" id="userInput" placeholder="Mesajınızı yazın..." onkeypress="if(event.key==='Enter') sendMessage()">
-            <button class="send-btn" id="sendBtn" onclick="sendMessage()">Gönder</button>
-        </div>
-    </div>
+    <!-- RESULTS -->
+    <div id="layerResults"></div>
 </div>
 
 <script>
     let globalStockList = [];
 
+    // ============================================================
+    // HİSSE LİSTESİNİ YÜKLE
+    // ============================================================
     window.onload = async function() {
         try {
             const res = await fetch('/api/stocks/list');
@@ -72,6 +152,9 @@
         }
     };
 
+    // ============================================================
+    // DROPDOWN FONKSİYONLARI
+    // ============================================================
     function renderDropdown(list) {
         const menu = document.getElementById("dropdownMenu");
         menu.innerHTML = "";
@@ -114,11 +197,14 @@
         }
     });
 
+    // ============================================================
+    // HİSSE DETAYI ÇEK
+    // ============================================================
     async function fetchStock(symbol) {
         if (!symbol) return;
         
         const card = document.getElementById("stockCard");
-        card.innerHTML = `<p><strong>${symbol}</strong> verileri çekiliyor (15 dk gecikmeli)...</p>`;
+        card.innerHTML = `<p><strong>${symbol}</strong> verileri çekiliyor...</p>`;
 
         try {
             const res = await fetch(`/api/stock/${symbol}`);
@@ -129,8 +215,9 @@
                 return;
             }
 
-            let profitHTML = "<ul>";
+            let profitHTML = "";
             if (typeof data.profits === 'object' && Object.keys(data.profits).length > 0) {
+                profitHTML = "<ul style='margin:5px 0; padding-left:20px;'>";
                 for (const [year, netProfit] of Object.entries(data.profits)) {
                     profitHTML += `<li><strong>${year}:</strong> ${netProfit}</li>`;
                 }
@@ -139,18 +226,136 @@
                 profitHTML = `<p>${data.profits}</p>`;
             }
 
+            const tech = data.technical || {};
+            const info = data.info || {};
+
             card.innerHTML = `
-                <h4>${data.symbol} Detayı</h4>
-                <p><strong>Güncel Fiyat (15 dk gecikmeli):</strong> ${data.price}</p>
-                <hr>
-                <h5>Yıllık Net Kâr Durumu:</h5>
+                <h4>${data.symbol}</h4>
+                <p><strong>Fiyat:</strong> <span class="highlight">${data.price}</span></p>
+                <hr style="margin:8px 0;">
+                <p><strong>📊 Teknik:</strong> RSI ${tech.rsi || '-'} | MACD ${tech.macd || '-'}</p>
+                <p><strong>📉 Volatilite:</strong> ${tech.volatility || '-'}% | BB Sıkışma: ${tech.bb_squeeze ? '✅' : '❌'}</p>
+                <hr style="margin:8px 0;">
+                <p><strong>💰 Bilgiler:</strong></p>
+                <p style="font-size:12px; color:#666;">
+                    P/E: ${info.pe_ratio || '-'} | Beta: ${info.beta || '-'} | Temettü: ${info.dividend_yield ? (info.dividend_yield * 100).toFixed(2) + '%' : '-'}
+                </p>
+                <hr style="margin:8px 0;">
+                <h5 style="margin:5px 0;">📅 Yıllık Net Kâr:</h5>
                 ${profitHTML}
             `;
         } catch (err) {
-            card.innerHTML = `<p style="color:red;">Veri çekme hatası oluştu.</p>`;
+            card.innerHTML = `<p style="color:red;">Veri çekme hatası: ${err.message}</p>`;
         }
     }
 
+    // ============================================================
+    // KATMAN FONKSİYONLARI
+    // ============================================================
+    async function runLayer(layer) {
+        const div = document.getElementById('layerResults');
+        div.style.display = 'block';
+        div.innerHTML = `<p>🔍 Katman ${layer} taranıyor...</p>`;
+        
+        try {
+            const res = await fetch(`/api/screener/layer${layer}`);
+            const data = await res.json();
+            
+            if (data.error) {
+                div.innerHTML = `<p style="color:red;">${data.error}</p>`;
+                return;
+            }
+            
+            let html = `<h4>📊 Katman ${layer} Sonuçları</h4>`;
+            html += `<p>⏰ ${data.timestamp || new Date().toLocaleString()}</p>`;
+            
+            if (layer === 1) {
+                html += `<p>🔎 Taranan: ${data.total_scanned} | ✅ Eşleşen: ${data.matches}</p>`;
+                html += createTable(data.results.slice(0, 30));
+            } 
+            else if (layer === 2) {
+                html += `<p>🔎 Ortak Hisseler: <strong>${data.common_count || 0}</strong></p>`;
+                if (data.common_stocks && data.common_stocks.length > 0) {
+                    html += `<h5>⭐ Ortak Hisseler (Tüm Gruplarda)</h5>`;
+                    html += createTable(data.common_stocks);
+                }
+                
+                const groups = data.groups || {};
+                html += `<h5>💰 En Karlı 50</h5>`;
+                html += createTable(groups.most_profitable ? groups.most_profitable.slice(0, 10) : []);
+                html += `<h5>📉 En Çok Değer Kaybeden 50</h5>`;
+                html += createTable(groups.most_declined ? groups.most_declined.slice(0, 10) : []);
+                html += `<h5>📈 Tavan Oranı En Yüksek 50</h5>`;
+                html += createTable(groups.highest_ceiling ? groups.highest_ceiling.slice(0, 10) : []);
+            }
+            else if (layer === 3) {
+                html += `<p>🔎 Analiz Edilen: ${data.total_analyzed}</p>`;
+                html += `<h5>🏆 En Yüksek Getiri Beklenen 20 Hisse</h5>`;
+                html += createTable(data.top_20);
+            }
+            
+            div.innerHTML = html;
+            
+        } catch (err) {
+            div.innerHTML = `<p style="color:red;">Hata: ${err.message}</p>`;
+        }
+    }
+
+    async function runFullScreener() {
+        const div = document.getElementById('layerResults');
+        div.style.display = 'block';
+        div.innerHTML = '<p>🔥 Tüm katmanlar taranıyor... Bu işlem 2-3 dakika sürebilir.</p>';
+        
+        try {
+            const res = await fetch('/api/screener/full');
+            const data = await res.json();
+            
+            let html = `<h4>✅ Tüm Katmanlar Tamamlandı</h4>`;
+            html += `<p>⏰ ${data.timestamp}</p>`;
+            html += `<p>Katman 1: <strong>${data.layer1?.matches || 0}</strong> eşleşme</p>`;
+            html += `<p>Katman 2: <strong>${data.layer2?.common_count || 0}</strong> ortak hisse</p>`;
+            html += `<p>Katman 3: <strong>${data.layer3?.total_analyzed || 0}</strong> hisse analiz edildi</p>`;
+            
+            html += `<h5>🏆 Kazanan Hisseler (Top 10)</h5>`;
+            html += createTable(data.layer3?.top_20?.slice(0, 10) || []);
+            
+            div.innerHTML = html;
+            
+        } catch (err) {
+            div.innerHTML = `<p style="color:red;">Hata: ${err.message}</p>`;
+        }
+    }
+
+    // ============================================================
+    // TABLO OLUŞTURMA
+    // ============================================================
+    function createTable(data) {
+        if (!data || data.length === 0) return '<p style="color:#888;">Veri yok</p>';
+        
+        const keys = Object.keys(data[0]);
+        let html = `<div class="table-wrap"><table>`;
+        html += `<tr>`;
+        keys.forEach(key => {
+            html += `<th>${key}</th>`;
+        });
+        html += `</tr>`;
+        
+        data.forEach(item => {
+            html += `<tr>`;
+            keys.forEach(key => {
+                let val = item[key] !== undefined && item[key] !== null ? item[key] : '-';
+                if (typeof val === 'boolean') val = val ? '✅' : '❌';
+                html += `<td>${val}</td>`;
+            });
+            html += `</tr>`;
+        });
+        html += `</table></div>`;
+        return html;
+    }
+
+    // ============================================================
+    // CHAT FONKSİYONLARI
+    // ============================================================
     async function sendMessage() {
         const input = document.getElementById("userInput");
         const chatBox = document.getElementById("chatBox");
@@ -170,10 +375,10 @@
             });
 
             const data = await res.json();
-            chatBox.innerHTML += `<div class="message bot">${data.reply}</div>`;
+            chatBox.innerHTML += `<div class="message bot">${data.reply || 'Üzgünüm, bir hata oluştu.'}</div>`;
             chatBox.scrollTop = chatBox.scrollHeight;
         } catch (err) {
-            chatBox.innerHTML += `<div class="message bot">Hata oluştu.</div>`;
+            chatBox.innerHTML += `<div class="message bot">Bağlantı hatası: ${err.message}</div>`;
         }
     }
 </script>

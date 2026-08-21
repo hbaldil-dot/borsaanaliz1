@@ -1,33 +1,13 @@
 import os
+import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from google import genai
-from motor.motor_asyncio import AsyncIOMotorClient
 
 app = FastAPI()
 
-# CORS Ayarları (Web arayüzünün sorunsuz erişimi için)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Ortam Değişkenleri (Render paneline gireceğimiz gizli şifreler)
+# Render panelinden çekilecek şifreler
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MONGO_URI = os.getenv("MONGO_URI")
-
-# Gemini Client Yapılandırması
-ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
-# MongoDB Bağlantısı
-mongo_client = AsyncIOMotorClient(MONGO_URI) if MONGO_URI else None
-db = mongo_client["ai_app_db"] if mongo_client else None
 
 class ChatRequest(BaseModel):
     user_id: str
@@ -35,31 +15,34 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    if not ai_client:
-        raise HTTPException(status_code=500, detail="Gemini API Anahtarı eksik!")
+    if not GEMINI_API_KEY:
+        return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!"}
 
-    try:
-        # 1. Yapay Zekadan Yanıt Al
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=request.message,
-        )
-        ai_reply = response.text
+    # Gemini API Direkt REST Bağlantısı (En stabil yöntem)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": request.message}]
+        }]
+    }
 
-        # 2. Verileri MongoDB Atlas'a Kaydet
-        if db is not None:
-            await db.chat_history.insert_one({
-                "user_id": request.user_id,
-                "user_message": request.message,
-                "bot_response": ai_reply
-            })
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, json=payload, timeout=30.0)
+            data = response.json()
 
-        return {"status": "success", "reply": ai_reply}
+            if response.status_code != 200:
+                error_msg = data.get("error", {}).get("message", "Bilinmeyen API hatası")
+                return {"reply": f"Gemini API Hatası ({response.status_code}): {error_msg}"}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            # Yanıtı Ayıkla
+            ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
+            return {"reply": ai_reply}
 
-# Ana Sayfa Erişimi
+        except Exception as e:
+            return {"reply": f"Sunucu Baglanti Hatasi: {str(e)}"}
+
 @app.get("/")
 async def read_index():
     return FileResponse("index.html")

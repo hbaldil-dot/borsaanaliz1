@@ -1,6 +1,7 @@
 import os
 import httpx
 import yfinance as yf
+from datetime import date
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -11,9 +12,40 @@ app = FastAPI()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGO_URI = os.getenv("MONGODB_URI")
 
+# Günlük Önbellek (Cache) Değişkenleri
+CACHED_STOCK_LIST = []
+LAST_UPDATE_DATE = None
+
+# Varsayılan Popüler BIST Hisseleri
+BIST_ALL_STOCKS = [
+    "AKBNK", "ALARK", "ARCLK", "ASELS", "BIMAS", "BRSAN", "DOAS", "EKGYO",
+    "ENKAI", "EREGL", "FROTO", "GARAN", "HEKTS", "ISCTR", "KCHOL", "KONTR",
+    "KOZAL", "KRDMD", "MGROS", "MIATK", "ODAS", "PETKM", "PGSUS", "SAHOL",
+    "SASA", "SISE", "TCELL", "THYAO", "TOASO", "TUPRS", "VAKBN", "YKBNK"
+]
+
 class ChatRequest(BaseModel):
     user_id: str
     message: str
+
+def get_daily_stock_list():
+    """Hisse listesini günde sadece 1 defa günceller"""
+    global CACHED_STOCK_LIST, LAST_UPDATE_DATE
+    today = date.today()
+
+    if LAST_UPDATE_DATE != today or not CACHED_STOCK_LIST:
+        # İleride dinamik bir API entegre edilse bile burada önbelleğe alınır
+        CACHED_STOCK_LIST = sorted(BIST_ALL_STOCKS)
+        LAST_UPDATE_DATE = today
+        print(f"[{today}] BIST Hisse listesi günlük olarak güncellendi.")
+
+    return CACHED_STOCK_LIST
+
+@app.get("/api/stocks/list")
+async def get_stock_list():
+    """Ön yüze güncel hisse listesini döndürür"""
+    stocks = get_daily_stock_list()
+    return {"stocks": stocks}
 
 @app.get("/api/stock/{symbol}")
 async def get_stock_info(symbol: str):
@@ -33,8 +65,8 @@ async def get_stock_info(symbol: str):
         if financials is not None and not financials.empty:
             if 'Net Income' in financials.index:
                 net_incomes = financials.loc['Net Income']
-                for date, val in net_incomes.items():
-                    year = str(date.year)
+                for d, val in net_incomes.items():
+                    year = str(d.year)
                     profit_data[year] = f"{val / 1_000_000:,.2f} M TL"
         
         return {

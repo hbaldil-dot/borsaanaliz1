@@ -1,6 +1,3 @@
 fastapi
 uvicorn
-google-genai
-pymongo
-motor
-python-dotenv
+httpx

@@ -77,47 +77,52 @@ async def get_stock(symbol: str):
     """Hisse detayını getir"""
     try:
         ticker = yf.Ticker(f"{symbol}.IS")
-        hist = ticker.history(period="1d")
+        
+        # Önce bilgileri al
+        info = ticker.info
+        
+        # Eğer info boşsa veya hata varsa
+        if not info or 'symbol' not in info:
+            return {"error": f"{symbol} için veri bulunamadı"}
+        
+        # Tarihsel veriyi al
+        hist = ticker.history(period="2d")
         
         if hist.empty:
-            return {"error": "Hisse bulunamadı"}
+            # Alternatif: sadece info'dan fiyat almayı dene
+            current_price = info.get('regularMarketPrice', info.get('currentPrice', 0))
+            if current_price == 0:
+                return {"error": f"{symbol} için fiyat verisi bulunamadı"}
+            
+            return {
+                "symbol": symbol.upper(),
+                "price": round(current_price, 2),
+                "change": 0,
+                "volume": info.get('volume', 0),
+                "market_cap": info.get('marketCap', 0),
+                "pe_ratio": info.get('trailingPE', 0),
+                "dividend_yield": info.get('dividendYield', 0)
+            }
         
-        # Güncel fiyat
         current_price = hist['Close'].iloc[-1]
-        
-        # Hisse bilgileri
-        info = ticker.info
+        prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+        change = ((current_price - prev_close) / prev_close) * 100 if prev_close > 0 else 0
         
         return {
             "symbol": symbol.upper(),
             "price": round(current_price, 2),
-            "change": round(((current_price - hist['Open'].iloc[-1]) / hist['Open'].iloc[-1]) * 100, 2),
+            "change": round(change, 2),
             "volume": int(hist['Volume'].iloc[-1]),
-            "market_cap": info.get("marketCap", 0),
-            "pe_ratio": info.get("trailingPE", 0),
-            "dividend_yield": info.get("dividendYield", 0)
+            "market_cap": info.get('marketCap', 0),
+            "pe_ratio": info.get('trailingPE', 0),
+            "dividend_yield": info.get('dividendYield', 0)
         }
     except Exception as e:
-        return {"error": str(e)}
-
-@app.get("/api/stock/{symbol}/history")
-async def get_stock_history(symbol: str, period: str = "6mo"):
-    """Hisse geçmiş verilerini getir"""
-    try:
-        ticker = yf.Ticker(f"{symbol}.IS")
-        hist = ticker.history(period=period)
-        
-        if hist.empty:
-            return {"error": "Veri bulunamadı"}
-        
-        return {
-            "symbol": symbol.upper(),
-            "dates": hist.index.strftime("%Y-%m-%d").tolist(),
-            "prices": hist['Close'].tolist(),
-            "volumes": hist['Volume'].tolist()
-        }
-    except Exception as e:
-        return {"error": str(e)}
+        # Detaylı hata mesajı
+        error_msg = str(e)
+        if "No price data found" in error_msg:
+            return {"error": f"{symbol} için veri bulunamadı"}
+        return {"error": error_msg}
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):

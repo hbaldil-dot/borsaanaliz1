@@ -62,6 +62,23 @@ BIST_STOCKS = [
 # API ENDPOINTLERİ
 # ============================================================
 
+import re
+
+@app.get("/api/stocks/live")
+async def get_live_stocks():
+    """Canlı BIST hisse listesini çek"""
+    try:
+        url = "https://www.kap.org.tr/tr/api/dis/bist-sirketler"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            if res.status_code == 200:
+                data = res.json()
+                symbols = [item.get("kod") for item in data if item.get("kod")]
+                symbols = [s.strip().upper() for s in symbols if s and len(s) >= 3]
+                return {"stocks": sorted(list(set(symbols)))}
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/")
 async def home():
     """Ana sayfa"""

@@ -19,7 +19,6 @@ async def chat(request: ChatRequest):
     if not GEMINI_API_KEY:
         return {"reply": "Hata: GEMINI_API_KEY Render panelinde tanımlı değil!"}
 
-    # Gemini REST API Çağrısı
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {"contents": [{"parts": [{"text": request.message}]}]}
 
@@ -29,16 +28,14 @@ async def chat(request: ChatRequest):
             data = response.json()
 
             if response.status_code != 200:
-                error_msg = data.get("error", {}).get("message", "Bilinmeyen API hatası")
+                error_msg = data.get("error", {}).get("message", "API hatası")
                 return {"reply": f"Gemini API Hatası ({response.status_code}): {error_msg}"}
 
             ai_reply = data["candidates"][0]["content"]["parts"][0]["text"]
 
-            # MongoDB Kaydı ve Hata Denetimi
             db_status = ""
             if MONGO_URI:
                 try:
-                    # Bağlantıyı isteğe özel anlık başlatıp zorlayarak yazıyoruz
                     mongo_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
                     db = mongo_client["borsaanaliz1_db"]
                     

@@ -1,9 +1,14 @@
 from setuptools import setup, find_packages
+import sys
+
+# Python versiyon kontrolü
+if sys.version_info < (3, 12):
+    sys.exit("Python 3.12+ required")
 
 setup(
     name="borsaanaliz1",
     version="2.0.0",
-    packages=find_packages(),
+    packages=find_packages(include=['app', 'app.*']),
     install_requires=[
         "fastapi>=0.115.6",
         "uvicorn[standard]>=0.34.0",
@@ -22,4 +27,8 @@ setup(
         "pytz>=2024.2"
     ],
     python_requires=">=3.12,<3.13",
+    classifiers=[
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+    ],
 )

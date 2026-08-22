@@ -1,15 +1,18 @@
 services:
   - type: web
-    name: borsaanaliz1
+    name: bist-ai-analiz
     runtime: python
-    repo: https://github.com/hbaldil-dot/borsaanaliz1
-    plan: free
-    region: oregon
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    repo: https://github.com/yourusername/bist-ai-analiz
+    plan: starter
+    region: frankfurt
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false
       - key: MONGODB_URI
         sync: false
-    pythonVersion: 3.11.9
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    healthCheckPath: /
+    autoDeploy: true

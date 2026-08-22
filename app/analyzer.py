@@ -4,7 +4,7 @@ import re
 import google.generativeai as genai
 from openai import OpenAI
 
-# API Anahtarlarını Al
+# API Anahtarları
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -33,9 +33,8 @@ YAPIŞTIRILACAK YANIT SADECE VE SADECE AŞAĞIDAKİ JSON FORMATINDA OLMALIDIR (B
 """
 
 def json_temizle_ve_yukle(metin):
-    """Yapay zekadan gelen metnin içindeki JSON yapısını temiz bir şekilde çıkarır."""
+    """Yapay zekadan gelen metnin içindeki JSON yapısını çıkarır."""
     try:
-        # Markdown kod bloklarını temizle (```json ... ```)
         match = re.search(r'\[.*\]', metin, re.DOTALL)
         if match:
             json_str = match.group(0)
@@ -58,7 +57,6 @@ def gpt_analiz_yap():
             ],
             temperature=0.7
         )
-        # Yeni SDK formatına uygun yanıt erişimi
         icerik = response.choices[0].message.content
         return json_temizle_ve_yukle(icerik)
     except Exception as e:
@@ -69,21 +67,28 @@ def gemini_analiz_yap():
     if not GEMINI_API_KEY:
         print("Gemini API anahtarı bulunamadı.")
         return []
-    try:
-        # Güncel model adı kullanımı
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        response = model.generate_content(PROMPT_TEXT)
-        return json_temizle_ve_yukle(response.text)
-    except Exception as e:
-        print(f"Gemini API Hatası: {e}")
-        return []
+    
+    # Desteklenen model sırasıyla denenir
+    modeller = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']
+    
+    for model_adi in modeller:
+        try:
+            model = genai.GenerativeModel(model_adi)
+            response = model.generate_content(PROMPT_TEXT)
+            sonuc = json_temizle_ve_yukle(response.text)
+            if sonuc:
+                return sonuc
+        except Exception as e:
+            print(f"Gemini ({model_adi}) Hatası: {e}")
+            continue
+            
+    return []
 
 def cift_ai_analiz_yap():
     print("Canlı AI Analiz Taraması Başlatıldı...")
     gpt_liste = gpt_analiz_yap()
     gemini_liste = gemini_analiz_yap()
 
-    # Ortak Kesişim Hesabı
     ortak_liste = []
     gemini_dict = {item.get('hisse'): item for item in gemini_liste if isinstance(item, dict) and 'hisse' in item}
 
@@ -111,7 +116,6 @@ def cift_ai_analiz_yap():
                     "ozet": f"GPT Notu: {g_item.get('ozet', '')} | Gemini Notu: {m_item.get('ozet', '')}"
                 })
 
-    # Ortak puan sıralaması
     ortak_liste.sort(key=lambda x: x['ort_puan'] if isinstance(x['ort_puan'], (int, float)) else 0, reverse=True)
 
     return {

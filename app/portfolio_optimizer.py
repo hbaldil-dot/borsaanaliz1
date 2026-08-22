@@ -13,7 +13,7 @@ class PortfolioOptimizer:
         tum_hisseler = self.collector.get_tum_hisseler()
         puanli_hisseler = []
         
-        for kod in tum_hisseler[:10]:  # İlk 10
+        for kod in tum_hisseler[:10]:
             skor = self.scorer.hisse_puanla(kod)
             if skor:
                 puanli_hisseler.append(skor)
@@ -21,7 +21,7 @@ class PortfolioOptimizer:
         puanli_hisseler.sort(key=lambda x: x["toplam_skor"], reverse=True)
         ilk5 = puanli_hisseler[:5]
         
-        # Ağırlıklar
+        # PDF'deki mantıkla ağırlıklandır
         agirliklar = {
             "SAHOL": 0.25,
             "KCHOL": 0.22,

@@ -10,8 +10,7 @@ VERILER = {"gpt": [], "gemini": [], "ortak": []}
 async def lifespan(app: FastAPI):
     global VERILER
     scheduler_baslat()
-    # Uygulama açılırken canlı API'lerden veriyi çeker
-    VERILER = cift_ai_analiz_yap()
+    # Sunucu başlarken boş veriyle başlatır, çökmesini engeller
     yield
 
 app = FastAPI(title="BIST Çift AI Analiz Motoru", lifespan=lifespan)
@@ -19,13 +18,14 @@ app = FastAPI(title="BIST Çift AI Analiz Motoru", lifespan=lifespan)
 @app.get("/run-scan")
 def manuel_tarama():
     global VERILER
+    # Butona basıldığında ChatGPT ve Gemini canlı taranır
     VERILER = cift_ai_analiz_yap()
     return RedirectResponse(url="/", status_code=303)
 
 def tablo_olustur(liste):
     html = ""
     if not liste:
-        return '<tr><td colspan="7" style="text-align:center; padding:15px; color:#64748b;">Henüz analiz verisi yok veya API yanıt bekleniyor...</td></tr>'
+        return '<tr><td colspan="7" style="text-align:center; padding:15px; color:#64748b;">Henüz canlı tarama yapılmadı. Taramayı başlatmak için yukarıdaki butona tıklayın.</td></tr>'
     
     for idx, item in enumerate(liste, start=1):
         html += f"""
@@ -45,7 +45,7 @@ def tablo_olustur(liste):
 def web_arayuzu():
     ortak_html = ""
     if not VERILER["ortak"]:
-        ortak_html = '<tr><td colspan="7" style="text-align:center; padding:15px; color:#64748b;">Ortak kesişim hisselerini görmek için "🔄 Taramayı Yenile" butonuna basın.</td></tr>'
+        ortak_html = '<tr><td colspan="7" style="text-align:center; padding:15px; color:#64748b;">Henüz canlı tarama yapılmadı. Kesişim listesi için "🔄 Taramayı Yenile" butonuna basın.</td></tr>'
     else:
         for idx, item in enumerate(VERILER["ortak"], start=1):
             ortak_html += f"""
@@ -88,14 +88,13 @@ def web_arayuzu():
             <div class="header">
                 <div>
                     <h1 style="margin:0;">🤖 ChatGPT & Gemini BIST Analiz Konsensüsü</h1>
-                    <p style="margin:5px 0 0 0; color:#64748b;">3 Aşamalı Canlı AI Sorgusuyla Oluşturulan Kesişim Listesi</p>
+                    <p style="margin:5px 0 0 0; color:#64748b;">Canlı Yapay Zeka Sorgularıyla Taranan BIST Hisseleri</p>
                 </div>
                 <a href="/run-scan" class="btn">🔄 Taramayı Yenile</a>
             </div>
 
-            <!-- 3. TABLO: KONSENSÜS / ORTAK HİSSELER -->
             <div class="card" style="border: 2px solid #22c55e; background-color: #fafdfb; margin-bottom: 25px;">
-                <h2 class="title-ortak">🎯 1. ÇİFT AI KONSENSÜS TABLOSU (Her İki Modelin Ortak Seçimleri)</h2>
+                <h2 class="title-ortak">🎯 1. ÇİFT AI KONSENSÜS TABLOSU (İki Modelin de Seçtiği Ortak Hisseler)</h2>
                 <table>
                     <thead>
                         <tr style="background-color: #dcfce7;">
@@ -114,9 +113,7 @@ def web_arayuzu():
                 </table>
             </div>
 
-            <!-- EKRANI 2'YE BÖLEN TABLOLAR -->
             <div class="grid-2">
-                <!-- CHATGPT TABLOSU -->
                 <div class="card">
                     <h3 class="title-gpt">🔵 ChatGPT En İyi 20 Hisse</h3>
                     <table>
@@ -137,7 +134,6 @@ def web_arayuzu():
                     </table>
                 </div>
 
-                <!-- GEMINI TABLOSU -->
                 <div class="card">
                     <h3 class="title-gemini">🟣 Gemini En İyi 20 Hisse</h3>
                     <table>

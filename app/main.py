@@ -3,23 +3,30 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional, Dict, List
+from typing import Optional, List, Dict
 from datetime import datetime
 import uvicorn
-import asyncio
+import os
+import logging
 
 from app.data_collector import BISTDataCollector
 from app.scoring_engine import ScoringEngine
 from app.portfolio_optimizer import PortfolioOptimizer
 from app.database import db
 
+# Logging ayarları
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="BIST AI Analiz Motoru",
-    description="Yahoo Finance destekli BIST hisse analiz ve portföy optimizasyonu",
-    version="2.0"
+    description="Yahoo Finance + Finnhub destekli BIST hisse analiz ve portföy optimizasyonu",
+    version="2.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# CORS
+# CORS ayarları - Render için geniş izinler
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,10 +50,13 @@ class ScanRequest(BaseModel):
 
 @app.get("/")
 async def root():
+    """Ana sayfa"""
     return {
         "message": "BIST AI Analiz Motoru",
         "versiyon": "2.0",
-        "veri_kaynagi": "Yahoo Finance",
+        "veri_kaynagi": "Yahoo Finance + Finnhub",
+        "environment": os.getenv("RENDER", "development"),
+        "mongodb": "connected" if db.client else "disconnected",
         "endpoints": [
             "/api/hisseler",
             "/api/hisse/{kod}",
@@ -54,22 +64,54 @@ async def root():
             "/api/portfolio",
             "/api/mevduat",
             "/api/compare",
-            "/api/update"
-        ]
+            "/api/update",
+            "/api/saved_portfolios"
+        ],
+        "docs": "/docs"
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Sağlık kontrolü"""
+    try:
+        # MongoDB kontrolü
+        db.client.server_info()
+        mongo_status = "connected"
+    except:
+        mongo_status = "disconnected"
+    
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "mongodb": mongo_status,
+        "hisse_sayisi": len(collector.get_tum_hisseler())
     }
 
 @app.get("/api/hisseler")
 async def get_hisseler():
     """Tüm hisselerin listesi"""
+    hisseler = collector.get_tum_hisseler()
     return {
-        "hisseler": collector.get_tum_hisseler(),
-        "adet": len(collector.get_tum_hisseler()),
+        "hisseler": hisseler,
+        "adet": len(hisseler),
         "tarih": datetime.now().isoformat()
     }
 
 @app.get("/api/hisse/{kod}")
 async def get_hisse_detay(kod: str, force_update: bool = False):
     """Hisse detayları"""
+    # Önce veritabanından kontrol et
+    if not force_update:
+        cached = db.get_hisse(kod)
+        if cached:
+            # Cache'den dön
+            return {
+                "source": "cache",
+                "data": cached,
+                "tarih": datetime.now().isoformat()
+            }
+    
+    # Yahoo Finance'den al
     veri = collector.get_hisse_verisi(kod, force_update)
     if not veri:
         raise HTTPException(status_code=404, detail="Hisse bulunamadı")
@@ -77,17 +119,17 @@ async def get_hisse_detay(kod: str, force_update: bool = False):
     skor = scorer.hisse_puanla(kod)
     bilanco = collector.get_bilanco(kod)
     
-    # Teknik analiz
-    hist = collector.get_historical_data(kod, period="6mo")
-    from app.technical_analysis import TechnicalAnalysis
-    teknik = TechnicalAnalysis.calculate_all_indicators(hist) if not hist.empty else {}
+    # Veritabanına kaydet
+    db.save_hisse({**veri, "skor": skor})
+    if bilanco:
+        db.save_bilanco(kod, bilanco)
     
     return {
+        "source": "yahoo_finance",
         "kod": kod,
         "fiyat_verisi": veri,
         "skor": skor,
         "bilanco": bilanco,
-        "teknik": teknik,
         "tarih": datetime.now().isoformat()
     }
 
@@ -98,16 +140,13 @@ async def scan_hisseler(request: ScanRequest):
     sonuclar = []
     hata_hisseler = []
     
-    for kod in tum_hisseler:
+    for kod in tum_hisseler[:20]:  # Rate limiting için ilk 20
         try:
-            # Veriyi güncelle
             veri = collector.get_hisse_verisi(kod, request.force_update)
             if veri:
-                # Puanla
                 skor = scorer.hisse_puanla(kod)
                 if skor:
                     sonuclar.append(skor)
-                    # Veritabanına kaydet
                     db.save_hisse({
                         "kod": kod,
                         "veri": veri,
@@ -116,8 +155,8 @@ async def scan_hisseler(request: ScanRequest):
                     })
         except Exception as e:
             hata_hisseler.append({"kod": kod, "hata": str(e)})
+            logger.error(f"❌ {kod} taranırken hata: {e}")
     
-    # Sırala
     sonuclar.sort(key=lambda x: x["toplam_skor"], reverse=True)
     
     return {
@@ -135,8 +174,7 @@ async def optimize_portfolio(request: PortfoyRequest):
         sonuc = optimizer.optimize(request.toplam_tutar, request.risk_seviyesi)
         
         # Sonucu kaydet
-        db.save_analiz_sonucu({
-            "tip": "portfolio",
+        db.save_portfoy({
             "request": request.dict(),
             "sonuc": sonuc,
             "tarih": datetime.now()
@@ -144,6 +182,7 @@ async def optimize_portfolio(request: PortfoyRequest):
         
         return sonuc
     except Exception as e:
+        logger.error(f"❌ Portföy optimizasyon hatası: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/mevduat")
@@ -199,35 +238,30 @@ async def update_all_data(background_tasks: BackgroundTasks):
     background_tasks.add_task(update_data_background)
     return {"status": "Veri güncelleme başlatıldı", "tarih": datetime.now().isoformat()}
 
-async def update_data_background():
-    """Arka planda veri güncelleme"""
-    hisseler = collector.get_tum_hisseler()
-    for kod in hisseler:
-        try:
-            collector.get_hisse_verisi(kod, force_update=True)
-            collector.get_bilanco(kod)
-        except Exception as e:
-            print(f"❌ {kod} güncellenirken hata: {e}")
-        await asyncio.sleep(0.5)  # Rate limiting
+@app.get("/api/saved_portfolios")
+async def get_saved_portfolios(limit: int = 10):
+    """Kaydedilmiş portföyleri getir"""
+    return {
+        "portfoyler": db.get_portfoyler(limit),
+        "tarih": datetime.now().isoformat()
+    }
 
 @app.on_event("startup")
 async def startup_event():
-    """Uygulama başlarken ilk verileri getir"""
-    print("🚀 BIST AI Analiz Motoru başlatılıyor...")
-    print(f"📊 Toplam hisse: {len(collector.get_tum_hisseler())}")
+    """Uygulama başlarken"""
+    logger.info("🚀 BIST AI Analiz Motoru başlatılıyor...")
+    logger.info(f"📊 Toplam hisse: {len(collector.get_tum_hisseler())}")
+    logger.info(f"🔗 MongoDB: {'Bağlı' if db.client else 'Bağlantı yok'}")
     
-    # İlk 5 hisseyi ön yükle
-    for kod in ["SAHOL", "KCHOL", "ULKER", "FROTO", "PGSUS"]:
-        try:
-            collector.get_hisse_verisi(kod)
-            print(f"✅ {kod} verisi yüklendi")
-        except Exception as e:
-            print(f"❌ {kod} yüklenirken hata: {e}")
+    # Environment'ı göster
+    logger.info(f"🌍 Environment: {os.getenv('RENDER', 'development')}")
+    logger.info(f"🔑 Finnhub API: {'Mevcut' if os.getenv('FINNHUB_API_KEY') else 'Yok'}")
 
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True
+        port=port,
+        reload=False if os.getenv("RENDER") else True
     )

@@ -1,12 +1,6 @@
 services:
   - type: web
     name: borsaanaliz1
-    runtime: image
-    image:
-      url: python:3.12-slim
-    buildCommand: |
-      pip install --upgrade pip
-      pip install setuptools wheel
-      pip install numpy==1.26.4
-      pip install -e .
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"

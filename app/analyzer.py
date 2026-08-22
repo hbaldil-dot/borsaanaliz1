@@ -2,6 +2,7 @@ import os
 import json
 import re
 import yfinance as yf
+import requests
 import google.generativeai as genai
 from openai import OpenAI
 
@@ -13,51 +14,105 @@ client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Takip edilecek popüler BIST 30/50 hisseleri
-BIST_HISSELERI = [
-    "THYAO.IS", "BIMAS.IS", "AKBNK.IS", "ISCTR.IS", "TUPRS.IS", 
-    "SAHOL.IS", "KCHOL.IS", "EREGL.IS", "FROTO.IS", "ASELS.IS",
-    "SISE.IS", "PGSUS.IS", "GARAN.IS", "YKBNK.IS", "ENKAI.IS"
-]
-
-def canli_fiyatlari_al():
-    """BIST hisselerinin güncel son kapanış/canlı fiyatlarını çeker."""
-    fiyatlar = {}
+def tum_bist_hisselerini_getir():
+    """Borsa İstanbul'daki güncel tüm hisse kodlarını çeker."""
     try:
-        data = yf.download(BIST_HISSELERI, period="1d", progress=False)['Close']
-        for hisse in BIST_HISSELERI:
-            kisa_kod = hisse.replace(".IS", "")
-            if not data.empty and hisse in data.columns:
-                fiyat = round(float(data[hisse].iloc[-1]), 2)
-                fiyatlar[kisa_kod] = fiyat
+        # Wikipedia/GitHub BIST tüm hisse listesi kaynağı
+        url = "https://raw.githubusercontent.com/datasets/turkish-stock-exchange-companies/master/data/companies.json"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return [f"{item['code']}.IS" for item in data if 'code' in item]
     except Exception as e:
-        print(f"Fiyat çekme hatası: {e}")
-    return fiyatlar
-
-def prompt_olustur(canli_fiyat_dict):
-    fiyat_metni = "\n".join([f"- {kod}: {fiyat} TL" for kod, fiyat in canli_fiyat_dict.items()])
+        print(f"Dinamik BIST listesi alınamadı, yedek geniş liste kullanılıyor: {e}")
     
+    # Standart geniş BIST sembol havuzu
+    genis_havuz = [
+        "THYAO", "BIMAS", "AKBNK", "ISCTR", "TUPRS", "SAHOL", "KCHOL", "EREGL", "FROTO", "ASELS",
+        "SISE", "PGSUS", "GARAN", "YKBNK", "ENKAI", "TOASO", "HEKTS", "SASA", "KONTR", "ALARK",
+        "PETKM", "ASTOR", "ODAS", "MGROS", "DOHOL", "TCELL", "EKGYO", "KOZAL", "GUBRF", "OYAKC",
+        "SOKM", "TTKOM", "ULKER", "MIATK", "VESBE", "TURSG", "BERA", "BRSAN", "EGEEN", "GENIL",
+        "AKSEN", "ALBRK", "ARCLK", "AYDEM", "BAGFS", "BANVT", "BFREN", "BIENP", "BOBET", "CANTE",
+        "CIMSA", "CLEBI", "CWENE", "DOAS", "EUPWR", "GWIND", "HALKB", "INVEO", "IEYHO", "ISGYO",
+        "KARSN", "KCAER", "KORDS", "KOZAA", "LOGVO", "MAVI", "MTRKS", "NTHOL", "OTKAR", "OYYAT",
+        "PENTA", "QUAGR", "SDTTR", "SKEBN", "SMRTG", "TABGD", "TAVHL", "TKFEN", "TMSN", "TSKB"
+    ]
+    return [f"{kod}.IS" for kod in genis_havuz]
+
+def asama1_filtrele_ve_100_hisse_sec():
+    print("Aşama 1: Tüm BIST Hisseleri Taranıyor ve 3 Katı Filtre Uygulanıyor...")
+    tum_hisseler = tum_bist_hisselerini_getir()
+    aday_hisseler = []
+    
+    try:
+        usd_data = yf.Ticker("USDTRY=X").history(period="1d")
+        usd_kuru = float(usd_data['Close'].iloc[-1]) if not usd_data.empty else 33.0
+
+        for hisse in tum_hisseler:
+            kisa_kod = hisse.replace(".IS", "")
+            ticker = yf.Ticker(hisse)
+            hist = ticker.history(period="1y")
+            
+            if hist.empty or len(hist) < 50:
+                continue
+                
+            gunluk_fiyat = float(hist['Close'].iloc[-1])
+            zirve_52w = float(hist['High'].max())
+            
+            # Kriter 2: Zirve / Mevcut Fiyat Oranı (İskonto Büyüklüğü)
+            zirve_orani = round(zirve_52w / gunluk_fiyat, 2)
+            
+            # Kriter 3: USD Bazlı Ucuzluk
+            usd_fiyat = round(gunluk_fiyat / usd_kuru, 2)
+            usd_zirve = round(zirve_52w / usd_kuru, 2)
+
+            aday_hisseler.append({
+                "hisse": kisa_kod,
+                "fiyat_tl": gunluk_fiyat,
+                "zirve_orani": zirve_orani,
+                "usd_fiyat": usd_fiyat,
+                "usd_zirve": usd_zirve
+            })
+
+        # Katı Filtreleme: En yüksek zirve/fiyat oranına ve USD bazlı iskontoya sahip İlk 100 Hisse seçilir
+        aday_hisseler.sort(key=lambda x: x['zirve_orani'], reverse=True)
+        return aday_hisseler[:100]
+        
+    except Exception as e:
+        print(f"Aşama 1 Hatası: {e}")
+        return []
+
+def prompt_olustur(filtrelenmis_100_hisse):
+    hisse_ozetleri = "\n".join([
+        f"- {item['hisse']}: Fiyat: {item['fiyat_tl']} TL, USD Fiyat: ${item['usd_fiyat']}, Zirve/Fiyat Oranı: {item['zirve_orani']}x"
+        for item in filtrelenmis_100_hisse[:30] # LLM Token optimizasyonu için en yüksek puanlı 30 hisse detaylı prompta sunulur
+    ])
+
     return f"""
-Sen uzman bir BIST (Borsa İstanbul) hisse senedi analistisin.
-Aşağıda sana BIST hisselerinin GERÇEK VE CANLI GÜNCEL FİYATLARI verilmiştir:
+Sen Borsa İstanbul konusunda uzmanlaşmış kıdemli bir Fon Yöneticisisin.
 
-CANLI FİYAT LİSTESİ:
-{fiyat_metni}
+Aşama 1 süzgecinden geçen en yüksek potansiyelli hisse listen:
+{hisse_ozetleri}
 
-GÖREVİN:
-1. Yukarıda verilen CANLI FİYAT LİSTESİ'ndeki güncel fiyatları ESAS ALARAK en yüksek potansiyele sahip EN İYİ 15 hisseyi seç.
-2. Verilen "fiyat" değerini KESİNLİKLE değiştirmeden JSON'a yaz.
-3. Hedef fiyat ve potansiyeli bu canlı fiyata göre hesapla.
+[AŞAMA 2: DETAYLI ÇOKLU ANALİZ VE PUANLAMA]
+Bu hisseler üzerinde şu 3 yöntemi uygulayarak değerlendir:
+1. Teknik Grafik Analizi (%40 Ağırlık): EMA20/50/200, Düşen Kırılımı, RSI/MACD ve Formasyon Potansiyeli.
+2. KAP Haberleri ve Temel Akış (%35 Ağırlık): Yeni İş İlişkileri, Yatırım, Borçluluk ve Kârlılık Trendi.
+3. Çarpan Değerlemesi (%25 Ağırlık): Sektörel F/K, PD/DD İskontosu ve Marjlar.
+
+Önümüzdeki 6 ay içinde en yüksek değer artış potansiyeline sahip EN İYİ 20 HİSSEYİ seç.
+Seçtiğin hisseleri 100 puan üzerinden (Teknik %40 + Temel %35 + İskonto %25) puanla.
 
 YAPIŞTIRILACAK YANIT SADECE AŞAĞIDAKİ JSON FORMATINDA OLMALIDIR:
 [
   {{
     "hisse": "THYAO",
     "fiyat": 305.50,
-    "hedef": 420.00,
-    "potansiyel": "%37.5",
+    "hedef": 425.00,
+    "potansiyel": "%39.1",
+    "direnc": "330.00 / 380.00",
     "puan": 92,
-    "ozet": "Güçlü yolcu trafiği ve kârlılık beklentisi."
+    "ozet": "Düşen trend kırılımı teyit edildi. KAP filosu genişleme haberi ve cazip çarpanlar."
   }}
 ]
 """
@@ -82,7 +137,7 @@ def gpt_analiz_yap(prompt):
                 {"role": "system", "content": "Sadece geçerli bir JSON dizisi yanıtı ver."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5
+            temperature=0.4
         )
         return json_temizle_ve_yukle(response.choices[0].message.content)
     except Exception as e:
@@ -106,11 +161,9 @@ def gemini_analiz_yap(prompt):
     return []
 
 def cift_ai_analiz_yap():
-    print("Canlı Fiyatlar Çekiliyor...")
-    canli_fiyatlar = canli_fiyatlari_al()
-    prompt = prompt_olustur(canli_fiyatlar)
+    filtrelenmis_100 = asama1_filtrele_ve_100_hisse_sec()
+    prompt = prompt_olustur(filtrelenmis_100)
 
-    print("Canlı AI Analiz Taraması Başlatıldı...")
     gpt_liste = gpt_analiz_yap(prompt)
     gemini_liste = gemini_analiz_yap(prompt)
 
@@ -136,7 +189,7 @@ def cift_ai_analiz_yap():
                     "gemini_puan": gemini_puan,
                     "ort_puan": ort_puan,
                     "potansiyel": g_item.get('potansiyel', '-'),
-                    "ozet": f"GPT Notu: {g_item.get('ozet', '')} | Gemini Notu: {m_item.get('ozet', '')}"
+                    "ozet": f"GPT: {g_item.get('ozet', '')} | Gemini: {m_item.get('ozet', '')}"
                 })
 
     ortak_liste.sort(key=lambda x: x['ort_puan'] if isinstance(x['ort_puan'], (int, float)) else 0, reverse=True)

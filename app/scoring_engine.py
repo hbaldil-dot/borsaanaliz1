@@ -13,7 +13,7 @@ class ScoringEngine:
         if not veri:
             return None
         
-        # Demo puanlama - gerçek hesaplama için geliştirilecek
+        # Burada gerçek puanlama mantığı olacak
         return {
             "kod": kod,
             "fiyat": veri.get("fiyat", 0),

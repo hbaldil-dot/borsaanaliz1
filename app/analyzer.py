@@ -68,8 +68,8 @@ def gemini_analiz_yap():
         print("Gemini API anahtarı bulunamadı.")
         return []
     
-    # Desteklenen model sırasıyla denenir
-    modeller = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro']
+    # Güncel API modelleri sırasıyla denenir
+    modeller = ['gemini-3.6-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp']
     
     for model_adi in modeller:
         try:

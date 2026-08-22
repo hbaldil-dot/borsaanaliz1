@@ -1,54 +1,57 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
+import os
+import json
+import google.generativeai as genai
 
-# Yahoo verisi çekilemezse kullanılacak hazır BIST veri havuzu
-YEDEK_VERILER = {
-    "SAHOL": {"fiyat": 90.15, "d1": 105.00, "d2": 115.00, "puan": 89},
-    "PGSUS": {"fiyat": 149.60, "d1": 180.00, "d2": 220.00, "puan": 87},
-    "VESBE": {"fiyat": 5.30, "d1": 6.40, "d2": 8.00, "puan": 86},
-    "EKGYO": {"fiyat": 19.30, "d1": 22.50, "d2": 27.10, "puan": 85},
-    "ULKER": {"fiyat": 92.80, "d1": 110.00, "d2": 135.00, "puan": 84},
-    "FROTO": {"fiyat": 79.60, "d1": 95.00, "d2": 115.00, "puan": 83},
-    "DOAS": {"fiyat": 170.30, "d1": 205.00, "d2": 250.00, "puan": 82},
-    "ALARK": {"fiyat": 107.70, "d1": 117.00, "d2": 140.00, "puan": 81},
-    "KCHOL": {"fiyat": 218.00, "d1": 229.00, "d2": 270.00, "puan": 80},
-    "TURSG": {"fiyat": 6.32, "d1": 7.50, "d2": 8.80, "puan": 79}
-}
+# Gemini API Yapılandırması
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+SYSTEM_PROMPT = """
+Aşağıdaki adımları sırasıyla uygulayarak Borsa İstanbul (BIST) pay piyasasında işlem gören tüm hisse senetleri üzerinde 3 aşamalı bir analiz gerçekleştir:
+
+[AŞAMA 1: ELEME VE İLK 100 HİSSENİN BELİRLENMESİ]
+1. 2026 Yılı Karlılığı: Net Kar > 0 olan şirketler.
+2. Zirve/Fiyat Oranı: 12 Aylık En Yüksek Fiyat / Günlük Mevcut Fiyat oranı en yüksek olanlar.
+3. USD Bazlı Ucuzluk: USD bazında geçmiş 3-5 yıllık ortalamalara göre belirgin iskonto içerenler.
+
+[AŞAMA 2: DETAYLI ÇOKLU ANALİZ]
+Belirlenen 100 hisse için Teknik Grafik, KAP Haberleri ve Çarpan Analizi uygula.
+
+[AŞAMA 3: İLK 20 HİSSENİN SEÇİMİ VE PUANLANMASI]
+En yüksek potansiyele sahip 20 hisseyi seç ve 100 üzerinden puanla.
+
+[ÇIKTI FORMATI]
+Yanıtı SADECE ve SADECE aşağıdaki JSON formatında ver, ekstra metin ekleme:
+[
+  {
+    "hisse": "SAHOL",
+    "fiyat": 90.15,
+    "hedef_fiyat": 155.00,
+    "potansiyel": "+%71.9",
+    "direnc": "105/115",
+    "puan": 89,
+    "ozet": "Düşen trend kırılımı gerçekleşti, olumlu KAP akışı bekleniyor."
+  }
+]
+"""
+
+def tam_ai_analiz_yap():
+    """Gemini API üzerinden tam prompt analizini çalıştırır."""
+    if not GEMINI_API_KEY:
+        return None
+        
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(SYSTEM_PROMPT)
+        
+        # JSON temizleme ve dönüştürme
+        text_data = response.text.replace("```json", "").replace("```", "").strip()
+        sonuclar = json.loads(text_data)
+        return sonuclar
+    except Exception as e:
+        print(f"AI Analiz Hatası: {e}")
+        return None
 
 def hisse_analiz_et(hisse_kodu: str):
-    try:
-        # Önce canlı Yahoo Finance verisi çekmeyi dene
-        symbol = f"{hisse_kodu}.IS"
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period="1mo")
-        
-        if not df.empty and len(df) > 2:
-            fiyat = float(df['Close'].iloc[-1])
-            d1 = float(df['High'].max())
-            d2 = d1 * 1.12
-            sma = float(df['Close'].mean())
-            puan = 88 if fiyat >= sma else 74
-        else:
-            raise ValueError("Canlı veri boş geldi, yedek veriye geçiliyor.")
-
-    except Exception:
-        # Canlı veri başarısız olursa yedek verileri kullan
-        yedek = YEDEK_VERILER.get(hisse_kodu, {"fiyat": 100.0, "d1": 120.0, "d2": 140.0, "puan": 75})
-        fiyat = yedek["fiyat"]
-        d1 = yedek["d1"]
-        d2 = yedek["d2"]
-        puan = yedek["puan"]
-
-    # Hedef Fiyat ve Potansiyel Getiri Hesaplama
-    hedef_fiyat = fiyat * (1 + (puan / 120))
-    potansiyel = ((hedef_fiyat - fiyat) / fiyat) * 100
-
-    return {
-        "hisse": hisse_kodu,
-        "fiyat": f"{fiyat:.2f}",
-        "hedef_fiyat": f"{hedef_fiyat:.2f}",
-        "potansiyel": f"+%{potansiyel:.1f}",
-        "direnc": f"{d1:.2f} / {d2:.2f}",
-        "puan": puan
-    }
+    # Tekil çağrılar için yedek mantık
+    return None

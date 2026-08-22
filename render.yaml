@@ -1,24 +1,12 @@
 services:
   - type: web
     name: borsaanaliz1
-    runtime: python
-    repo: https://github.com/hbaldil-dot/borsaanaliz1
-    plan: starter
-    region: frankfurt
-    envVars:
-      - key: MONGODB_URI
-        sync: false
-      - key: FINNHUB_API_KEY
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: PYTHON_VERSION
-        value: 3.12.0
+    runtime: image
+    image:
+      url: python:3.12-slim
     buildCommand: |
       pip install --upgrade pip
       pip install setuptools wheel
       pip install numpy==1.26.4
       pip install -e .
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
-    healthCheckPath: /
-    autoDeploy: true

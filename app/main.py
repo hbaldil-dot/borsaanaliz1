@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from contextlib import asynccontextmanager
 from app.scheduler import scheduler_baslat, gunluk_tarama_yap
 
@@ -9,30 +9,38 @@ SON_TARAMA_SONUCLARI = []
 async def lifespan(app: FastAPI):
     global SON_TARAMA_SONUCLARI
     scheduler_baslat()
-    SON_TARAMA_SONUCLARI = gunluk_tarama_yap()
+    try:
+        SON_TARAMA_SONUCLARI = gunluk_tarama_yap()
+    except Exception as e:
+        print(f"Başlangıç tarama hatası: {e}")
     yield
 
 app = FastAPI(title="BIST AI Analiz Motoru", lifespan=lifespan)
 
-@app.get("/api/scan")
-def api_scan():
-    return {"status": "success", "data": SON_TARAMA_SONUCLARI}
+@app.get("/run-scan")
+def manuel_tarama():
+    global SON_TARAMA_SONUCLARI
+    SON_TARAMA_SONUCLARI = gunluk_tarama_yap()
+    return RedirectResponse(url="/", status_code=303)
 
 @app.get("/", response_class=HTMLResponse)
 def web_arayuzu():
     satirlar_html = ""
-    for idx, item in enumerate(SON_TARAMA_SONUCLARI, start=1):
-        satirlar_html += f"""
-        <tr>
-            <td style="text-align: center; font-weight: bold;">{idx}</td>
-            <td style="font-weight: bold; color: #1e3a8a;">{item['hisse']}</td>
-            <td>{item['fiyat']} TL</td>
-            <td>{item['hedef_fiyat']} TL</td>
-            <td style="color: #16a34a; font-weight: bold;">{item['potansiyel']}</td>
-            <td>{item['direnc']}</td>
-            <td style="text-align: center;"><span class="badge">{item['puan']}</span></td>
-        </tr>
-        """
+    if not SON_TARAMA_SONUCLARI:
+        satirlar_html = '<tr><td colspan="7" style="text-align:center; padding: 20px; color: #64748b;">Henüz veri taranmadı. Aşağıdaki "Şimdi Taramayı Başlat" butonuna basarak verileri yükleyebilirsiniz.</td></tr>'
+    else:
+        for idx, item in enumerate(SON_TARAMA_SONUCLARI, start=1):
+            satirlar_html += f"""
+            <tr>
+                <td style="text-align: center; font-weight: bold;">{idx}</td>
+                <td style="font-weight: bold; color: #1e3a8a;">{item['hisse']}</td>
+                <td>{item['fiyat']} TL</td>
+                <td>{item['hedef_fiyat']} TL</td>
+                <td style="color: #16a34a; font-weight: bold;">{item['potansiyel']}</td>
+                <td>{item['direnc']}</td>
+                <td style="text-align: center;"><span class="badge">{item['puan']}</span></td>
+            </tr>
+            """
 
     return f"""
     <!DOCTYPE html>
@@ -43,6 +51,9 @@ def web_arayuzu():
         <style>
             body {{ font-family: sans-serif; background-color: #f8fafc; margin: 20px; }}
             .container {{ max-width: 1100px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+            .header-flex {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }}
+            .btn {{ background-color: #16a34a; color: white; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; }}
+            .btn:hover {{ background-color: #15803d; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
             th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
             th {{ background-color: #f1f5f9; }}
@@ -51,8 +62,13 @@ def web_arayuzu():
     </head>
     <body>
         <div class="container">
-            <h1>📊 BIST Günlük Analiz Tablosu</h1>
-            <p>Günde 3 defa otomatik güncellenen teknik ve potansiyel değerlendirme tablosu.</p>
+            <div class="header-flex">
+                <div>
+                    <h1 style="margin:0;">📊 BIST Günlük Analiz Tablosu</h1>
+                    <p style="margin:5px 0 0 0; color:#64748b;">Günde 3 defa otomatik güncellenen teknik ve potansiyel değerlendirme tablosu.</p>
+                </div>
+                <a href="/run-scan" class="btn">🔄 Şimdi Taramayı Başlat</a>
+            </div>
             <table>
                 <thead>
                     <tr>

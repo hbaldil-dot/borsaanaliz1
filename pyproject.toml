@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "borsaanaliz1"
 version = "2.0.0"
 description = "BIST AI Analiz Motoru"
+authors = [{name = "hbaldil-dot"}]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -32,3 +33,7 @@ dev = [
     "black>=24.10.0",
     "flake8>=7.1.1"
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*"]

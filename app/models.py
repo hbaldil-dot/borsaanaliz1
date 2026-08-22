@@ -1,6 +1,6 @@
 # app/models.py
 from pydantic import BaseModel
-from typing import Optional, Dict, List
+from typing import Optional, List
 from datetime import datetime
 
 class HisseVeri(BaseModel):
